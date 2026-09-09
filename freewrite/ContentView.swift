@@ -93,8 +93,6 @@ struct ContentView: View {
     @State private var timerIsRunning = false
     @State private var isHoveringTimer = false
     @State private var isHoveringFullscreen = false
-    @State private var hoveredFont: String? = nil
-    @State private var isHoveringSize = false
     @State private var fontSize: CGFloat = 18
     @State private var blinkCount = 0
     @State private var isBlinking = false
@@ -137,6 +135,17 @@ struct ContentView: View {
     @State private var showingVideoPermissionPopover = false
     @State private var videoPermissionPopoverItems: [VideoPermissionPopoverItem] = []
     @State private var videoPermissionPopoverFallbackMessage: String? = nil
+    @State private var showingSettings = false
+    @State private var isHoveringSettings = false
+    @State private var showingOllamaPanel = false
+    @State private var ollamaPromptText: String = ""
+    @StateObject private var ollamaService = OllamaService()
+    @State private var sidebarSearchQuery: String = ""
+    @State private var pinnedEntryIDs: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "pinnedEntryIDs") ?? [])
+    @AppStorage(AppSettingsKeys.customChatGPTPrompt) private var customChatGPTPrompt: String = ""
+    @AppStorage(AppSettingsKeys.customClaudePrompt) private var customClaudePrompt: String = ""
+    @AppStorage(AppSettingsKeys.customOllamaPrompt) private var customOllamaPrompt: String = ""
+    @AppStorage(AppSettingsKeys.ollamaEndpoint) private var ollamaEndpoint: String = AppSettingsDefaults.ollamaEndpoint
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     let entryHeight: CGFloat = 40
     
@@ -198,32 +207,18 @@ struct ContentView: View {
         return cache
     }()
     
-    // Add shared prompt constant
-    private let aiChatPrompt = """
-    below is my journal entry. wyt? talk through it with me like a friend. don't therpaize me and give me a whole breakdown, don't repeat my thoughts with headings. really take all of this, and tell me back stuff truly as if you're an old homie.
-    
-    Keep it casual, dont say yo, help me make new connections i don't see, comfort, validate, challenge, all of it. dont be afraid to say a lot. format with markdown headings if needed.
+    // AI prompts: user-editable via Settings (empty custom value falls back to the default)
+    private var effectiveChatGPTPrompt: String {
+        customChatGPTPrompt.isEmpty ? PromptLibrary.defaultChatGPTPrompt : customChatGPTPrompt
+    }
 
-    do not just go through every single thing i say, and say it back to me. you need to proccess everythikng is say, make connections i don't see it, and deliver it all back to me as a story that makes me feel what you think i wanna feel. thats what the best therapists do.
+    private var effectiveClaudePrompt: String {
+        customClaudePrompt.isEmpty ? PromptLibrary.defaultClaudePrompt : customClaudePrompt
+    }
 
-    ideally, you're style/tone should sound like the user themselves. it's as if the user is hearing their own tone but it should still feel different, because you have different things to say and don't just repeat back they say.
-
-    else, start by saying, "hey, thanks for showing me this. my thoughts:"
-        
-    my entry:
-    """
-    
-    private let claudePrompt = """
-    Take a look at my journal entry below. I'd like you to analyze it and respond with deep insight that feels personal, not clinical.
-    Imagine you're not just a friend, but a mentor who truly gets both my tech background and my psychological patterns. I want you to uncover the deeper meaning and emotional undercurrents behind my scattered thoughts.
-    Keep it casual, dont say yo, help me make new connections i don't see, comfort, validate, challenge, all of it. dont be afraid to say a lot. format with markdown headings if needed.
-    Use vivid metaphors and powerful imagery to help me see what I'm really building. Organize your thoughts with meaningful headings that create a narrative journey through my ideas.
-    Don't just validate my thoughts - reframe them in a way that shows me what I'm really seeking beneath the surface. Go beyond the product concepts to the emotional core of what I'm trying to solve.
-    Be willing to be profound and philosophical without sounding like you're giving therapy. I want someone who can see the patterns I can't see myself and articulate them in a way that feels like an epiphany.
-    Start with 'hey, thanks for showing me this. my thoughts:' and then use markdown headings to structure your response.
-
-    Here's my journal entry:
-    """
+    private var effectiveOllamaPrompt: String {
+        customOllamaPrompt.isEmpty ? PromptLibrary.defaultOllamaPrompt : customOllamaPrompt
+    }
     
     // Initialize with saved theme preference if available
     init() {
@@ -679,6 +674,17 @@ struct ContentView: View {
         return currentRandomFont.isEmpty ? "Random" : "Random [\(currentRandomFont)]"
     }
 
+    var currentFontDisplayName: String {
+        if !currentRandomFont.isEmpty { return currentRandomFont }
+        switch selectedFont {
+        case "Lato-Regular": return "Lato"
+        case "Arial": return "Arial"
+        case ".AppleSystemUIFont": return "System"
+        case "Times New Roman": return "Serif"
+        default: return selectedFont
+        }
+    }
+
     private func startVideoRecordingPreflight() {
         guard !isPreparingVideoRecording, !showingVideoRecording else {
             return
@@ -957,18 +963,25 @@ struct ContentView: View {
                                 isHoveringBottomNav = hovering
                             }
                         } else {
-                            // Font buttons (left)
+                            // Font controls (left) — compact dropdowns instead of an inline button row
                             HStack(spacing: 8) {
-                                Button(fontSizeButtonTitle) {
-                                    if let currentIndex = fontSizes.firstIndex(of: fontSize) {
-                                        let nextIndex = (currentIndex + 1) % fontSizes.count
-                                        fontSize = fontSizes[nextIndex]
+                                Menu {
+                                    ForEach(fontSizes, id: \.self) { size in
+                                        Button(action: { fontSize = size }) {
+                                            if fontSize == size {
+                                                Label("\(Int(size))px", systemImage: "checkmark")
+                                            } else {
+                                                Text("\(Int(size))px")
+                                            }
+                                        }
                                     }
+                                } label: {
+                                    Text(fontSizeButtonTitle)
+                                        .foregroundColor(textColor)
                                 }
-                                .buttonStyle(.plain)
-                                .foregroundColor(isHoveringSize ? textHoverColor : textColor)
+                                .menuStyle(.borderlessButton)
+                                .fixedSize()
                                 .onHover { hovering in
-                                    isHoveringSize = hovering
                                     isHoveringBottomNav = hovering
                                     if hovering {
                                         NSCursor.pointingHand.push()
@@ -976,96 +989,40 @@ struct ContentView: View {
                                         NSCursor.pop()
                                     }
                                 }
-                                
+
                                 Text("•")
                                     .foregroundColor(.gray)
-                                
-                                Button("Lato") {
-                                    selectedFont = "Lato-Regular"
-                                    currentRandomFont = ""
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundColor(hoveredFont == "Lato" ? textHoverColor : textColor)
-                                .onHover { hovering in
-                                    hoveredFont = hovering ? "Lato" : nil
-                                    isHoveringBottomNav = hovering
-                                    if hovering {
-                                        NSCursor.pointingHand.push()
-                                    } else {
-                                        NSCursor.pop()
+
+                                Menu {
+                                    Button("Lato") {
+                                        selectedFont = "Lato-Regular"
+                                        currentRandomFont = ""
                                     }
-                                }
-                                
-                                Text("•")
-                                    .foregroundColor(.gray)
-                                
-                                Button("Arial") {
-                                    selectedFont = "Arial"
-                                    currentRandomFont = ""
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundColor(hoveredFont == "Arial" ? textHoverColor : textColor)
-                                .onHover { hovering in
-                                    hoveredFont = hovering ? "Arial" : nil
-                                    isHoveringBottomNav = hovering
-                                    if hovering {
-                                        NSCursor.pointingHand.push()
-                                    } else {
-                                        NSCursor.pop()
+                                    Button("Arial") {
+                                        selectedFont = "Arial"
+                                        currentRandomFont = ""
                                     }
-                                }
-                                
-                                Text("•")
-                                    .foregroundColor(.gray)
-                                
-                                Button("System") {
-                                    selectedFont = ".AppleSystemUIFont"
-                                    currentRandomFont = ""
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundColor(hoveredFont == "System" ? textHoverColor : textColor)
-                                .onHover { hovering in
-                                    hoveredFont = hovering ? "System" : nil
-                                    isHoveringBottomNav = hovering
-                                    if hovering {
-                                        NSCursor.pointingHand.push()
-                                    } else {
-                                        NSCursor.pop()
+                                    Button("System") {
+                                        selectedFont = ".AppleSystemUIFont"
+                                        currentRandomFont = ""
                                     }
-                                }
-                                
-                                Text("•")
-                                    .foregroundColor(.gray)
-                                
-                                Button("Serif") {
-                                    selectedFont = "Times New Roman"
-                                    currentRandomFont = ""
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundColor(hoveredFont == "Serif" ? textHoverColor : textColor)
-                                .onHover { hovering in
-                                    hoveredFont = hovering ? "Serif" : nil
-                                    isHoveringBottomNav = hovering
-                                    if hovering {
-                                        NSCursor.pointingHand.push()
-                                    } else {
-                                        NSCursor.pop()
+                                    Button("Serif") {
+                                        selectedFont = "Times New Roman"
+                                        currentRandomFont = ""
                                     }
-                                }
-                                
-                                Text("•")
-                                    .foregroundColor(.gray)
-                                
-                                Button(randomButtonTitle) {
-                                    if let randomFont = availableFonts.randomElement() {
-                                        selectedFont = randomFont
-                                        currentRandomFont = randomFont
+                                    Button(randomButtonTitle) {
+                                        if let randomFont = availableFonts.randomElement() {
+                                            selectedFont = randomFont
+                                            currentRandomFont = randomFont
+                                        }
                                     }
+                                } label: {
+                                    Text(currentFontDisplayName)
+                                        .foregroundColor(textColor)
                                 }
-                                .buttonStyle(.plain)
-                                .foregroundColor(hoveredFont == "Random" ? textHoverColor : textColor)
+                                .menuStyle(.borderlessButton)
+                                .fixedSize()
                                 .onHover { hovering in
-                                    hoveredFont = hovering ? "Random" : nil
                                     isHoveringBottomNav = hovering
                                     if hovering {
                                         NSCursor.pointingHand.push()
@@ -1085,6 +1042,14 @@ struct ContentView: View {
                         
                         // Utility buttons (moved to right)
                         HStack(spacing: 8) {
+                            if !isViewingVideoEntry {
+                                Text("\(currentWordCount) words")
+                                    .foregroundColor(textColor)
+
+                                Text("•")
+                                    .foregroundColor(.gray)
+                            }
+
                             Button(timerButtonTitle) {
                                 let now = Date()
                                 if let lastClick = lastClickTime,
@@ -1238,8 +1203,8 @@ struct ContentView: View {
                                     let chatSourceText = currentChatSourceText()
                                     
                                     // Calculate potential URL lengths
-                                    let gptFullText = aiChatPrompt + "\n\n" + chatSourceText
-                                    let claudeFullText = claudePrompt + "\n\n" + chatSourceText
+                                    let gptFullText = effectiveChatGPTPrompt + "\n\n" + chatSourceText
+                                    let claudeFullText = effectiveClaudePrompt + "\n\n" + chatSourceText
                                     let encodedGptText = gptFullText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
                                     let encodedClaudeText = claudeFullText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
                                     
@@ -1278,7 +1243,28 @@ struct ContentView: View {
                                                 NSCursor.pop()
                                             }
                                         }
-                                        
+
+                                        Divider()
+
+                                        Button(action: {
+                                            showingChatMenu = false
+                                            startOllamaChat()
+                                        }) {
+                                            Text("Ollama (Offline)")
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 8)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .foregroundColor(popoverTextColor)
+                                        .onHover { hovering in
+                                            if hovering {
+                                                NSCursor.pointingHand.push()
+                                            } else {
+                                                NSCursor.pop()
+                                            }
+                                        }
+
                                     } else if !isVideoEntry && text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("hi. my name is farza.") {
                                         Text("Yo. Sorry, you can't chat with the guide lol. Please write your own entry.")
                                             .font(.system(size: 14))
@@ -1334,9 +1320,30 @@ struct ContentView: View {
                                                 NSCursor.pop()
                                             }
                                         }
-                                        
+
                                         Divider()
-                                        
+
+                                        Button(action: {
+                                            showingChatMenu = false
+                                            startOllamaChat()
+                                        }) {
+                                            Text("Ollama (Offline)")
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 8)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .foregroundColor(popoverTextColor)
+                                        .onHover { hovering in
+                                            if hovering {
+                                                NSCursor.pointingHand.push()
+                                            } else {
+                                                NSCursor.pop()
+                                            }
+                                        }
+
+                                        Divider()
+
                                         Button(action: {
                                             // Don't dismiss menu, just copy and update state
                                             copyPromptToClipboard()
@@ -1463,6 +1470,9 @@ struct ContentView: View {
                             // Version history button
                             Button(action: {
                                 withAnimation(.easeInOut(duration: 0.2)) {
+                                    if !showingSidebar {
+                                        showingOllamaPanel = false
+                                    }
                                     showingSidebar.toggle()
                                 }
                             }) {
@@ -1472,6 +1482,27 @@ struct ContentView: View {
                             .buttonStyle(.plain)
                             .onHover { hovering in
                                 isHoveringClock = hovering
+                                isHoveringBottomNav = hovering
+                                if hovering {
+                                    NSCursor.pointingHand.push()
+                                } else {
+                                    NSCursor.pop()
+                                }
+                            }
+
+                            Text("•")
+                                .foregroundColor(.gray)
+
+                            // Settings button
+                            Button(action: {
+                                showingSettings = true
+                            }) {
+                                Image(systemName: "gearshape")
+                                    .foregroundColor(isHoveringSettings ? textHoverColor : textColor)
+                            }
+                            .buttonStyle(.plain)
+                            .onHover { hovering in
+                                isHoveringSettings = hovering
                                 isHoveringBottomNav = hovering
                                 if hovering {
                                     NSCursor.pointingHand.push()
@@ -1529,6 +1560,12 @@ struct ContentView: View {
                                     .lineLimit(1)
                             }
                             Spacer()
+                            if writingStreak > 0 {
+                                Text("🔥 \(writingStreak)")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                                    .help("\(writingStreak) day writing streak")
+                            }
                         }
                     }
                     .buttonStyle(.plain)
@@ -1537,13 +1574,35 @@ struct ContentView: View {
                     .onHover { hovering in
                         isHoveringHistory = hovering
                     }
-                    
+
                     Divider()
-                    
+
+                    // Search field
+                    HStack(spacing: 6) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                        TextField("Search entries...", text: $sidebarSearchQuery)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12))
+                        if !sidebarSearchQuery.isEmpty {
+                            Button(action: { sidebarSearchQuery = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+
+                    Divider()
+
                     // Entries List
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            ForEach(entries) { entry in
+                            ForEach(filteredSidebarEntries) { entry in
                                 Button(action: {
                                     if selectedEntryId != entry.id {
                                         historyDebug("ROW TAP \(debugEntrySummary(entry))")
@@ -1599,23 +1658,47 @@ struct ContentView: View {
                                                     .lineLimit(1)
                                                     .foregroundColor(.primary)
 
+                                                Button(action: { togglePin(entry) }) {
+                                                    Image(systemName: isPinned(entry) ? "star.fill" : "star")
+                                                        .font(.system(size: 10))
+                                                        .foregroundColor(isPinned(entry) ? .yellow : Color.gray.opacity(0.3))
+                                                }
+                                                .buttonStyle(.plain)
+                                                .help(isPinned(entry) ? "Unpin entry" : "Pin entry")
+                                                .onHover { hovering in
+                                                    if hovering {
+                                                        NSCursor.pointingHand.push()
+                                                    } else {
+                                                        NSCursor.pop()
+                                                    }
+                                                }
+
                                                 Spacer()
-                                                
+
                                                 // Export/Trash icons that appear on hover
                                                 if hoveredEntryId == entry.id {
                                                     HStack(spacing: 8) {
-                                                        // Export PDF button
-                                                        Button(action: {
-                                                            exportEntryAsPDF(entry: entry)
-                                                        }) {
+                                                        // Export menu (PDF / Markdown / Text)
+                                                        Menu {
+                                                            Button("Export as PDF") {
+                                                                exportEntryAsPDF(entry: entry)
+                                                            }
+                                                            Button("Export as Markdown") {
+                                                                exportEntryAsMarkdown(entry: entry)
+                                                            }
+                                                            Button("Export as Text") {
+                                                                exportEntryAsText(entry: entry)
+                                                            }
+                                                        } label: {
                                                             Image(systemName: "arrow.down.circle")
                                                                 .font(.system(size: 11))
-                                                                .foregroundColor(hoveredExportId == entry.id ? 
-                                                                    (colorScheme == .light ? .black : .white) : 
+                                                                .foregroundColor(hoveredExportId == entry.id ?
+                                                                    (colorScheme == .light ? .black : .white) :
                                                                     (colorScheme == .light ? .gray : .gray.opacity(0.8)))
                                                         }
-                                                        .buttonStyle(.plain)
-                                                        .help("Export entry as PDF")
+                                                        .menuStyle(.borderlessButton)
+                                                        .fixedSize()
+                                                        .help("Export entry")
                                                         .onHover { hovering in
                                                             withAnimation(.easeInOut(duration: 0.2)) {
                                                                 hoveredExportId = hovering ? entry.id : nil
@@ -1675,7 +1758,7 @@ struct ContentView: View {
                                 }
                                 .help("Click to select this entry")  // Add tooltip
                                 
-                                if entry.id != entries.last?.id {
+                                if entry.id != filteredSidebarEntries.last?.id {
                                     Divider()
                                 }
                             }
@@ -1683,8 +1766,29 @@ struct ContentView: View {
                     }
                     .scrollIndicators(.never)
                 }
-                .frame(width: 200)
+                .frame(width: 280)
                 .background(Color(colorScheme == .light ? .white : NSColor.black))
+            }
+
+            // Ollama offline-chat panel
+            if showingOllamaPanel {
+                Divider()
+
+                OllamaPanelView(
+                    service: ollamaService,
+                    endpoint: ollamaEndpoint,
+                    prompt: ollamaPromptText,
+                    colorScheme: colorScheme,
+                    canInsert: !isViewingVideoEntry,
+                    onInsert: { response in
+                        guard !response.isEmpty else { return }
+                        text += (text.isEmpty ? "" : "\n\n") + response
+                    },
+                    onClose: {
+                        ollamaService.cancel()
+                        showingOllamaPanel = false
+                    }
+                )
             }
         }
         .overlay {
@@ -1710,6 +1814,9 @@ struct ContentView: View {
         .onAppear {
             showingSidebar = false  // Hide sidebar by default
             loadExistingEntries()
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
         }
         .onChange(of: showingVideoRecording) { _, isShowing in
             if !isShowing {
@@ -1744,6 +1851,71 @@ struct ContentView: View {
         }
     }
     
+    private var filteredSidebarEntries: [HumanEntry] {
+        let query = sidebarSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = query.isEmpty ? entries : entries.filter { matchesSearch($0, query: query) }
+        // Stable sort: pinned entries bubble to the top, preserving date-desc order within each group.
+        return base.sorted { isPinned($0) && !isPinned($1) }
+    }
+
+    private func isPinned(_ entry: HumanEntry) -> Bool {
+        pinnedEntryIDs.contains(entry.id.uuidString)
+    }
+
+    private func togglePin(_ entry: HumanEntry) {
+        let key = entry.id.uuidString
+        if pinnedEntryIDs.contains(key) {
+            pinnedEntryIDs.remove(key)
+        } else {
+            pinnedEntryIDs.insert(key)
+        }
+        UserDefaults.standard.set(Array(pinnedEntryIDs), forKey: "pinnedEntryIDs")
+    }
+
+    private func matchesSearch(_ entry: HumanEntry, query: String) -> Bool {
+        let lowercasedQuery = query.lowercased()
+        if entry.previewText.lowercased().contains(lowercasedQuery) { return true }
+        if entry.date.lowercased().contains(lowercasedQuery) { return true }
+
+        if let videoFilename = resolvedVideoFilename(for: entry) {
+            guard let transcript = loadTranscriptText(for: videoFilename) else { return false }
+            return transcript.lowercased().contains(lowercasedQuery)
+        }
+
+        let fileURL = getDocumentsDirectory().appendingPathComponent(entry.filename)
+        guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else { return false }
+        return content.lowercased().contains(lowercasedQuery)
+    }
+
+    private var currentWordCount: Int {
+        text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split { $0.isWhitespace || $0.isNewline }
+            .count
+    }
+
+    private var writingStreak: Int {
+        let calendar = Calendar.current
+        let entryDays = Set(entries.compactMap { entry -> Date? in
+            guard let timestamp = parseCanonicalEntryFilename(entry.filename)?.timestamp else { return nil }
+            return calendar.startOfDay(for: timestamp)
+        })
+        guard !entryDays.isEmpty else { return 0 }
+
+        var streak = 0
+        var cursor = calendar.startOfDay(for: Date())
+        if !entryDays.contains(cursor) {
+            guard let yesterday = calendar.date(byAdding: .day, value: -1, to: cursor) else { return 0 }
+            cursor = yesterday
+        }
+        while entryDays.contains(cursor) {
+            streak += 1
+            guard let previousDay = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+            cursor = previousDay
+        }
+        return streak
+    }
+
     private func backgroundColor(for entry: HumanEntry) -> Color {
         if entry.id == selectedEntryId {
             return Color.gray.opacity(0.1)  // More subtle selection highlight
@@ -1868,7 +2040,7 @@ struct ContentView: View {
     }
     
     private func openChatGPT() {
-        let fullText = aiChatPrompt + "\n\n" + currentChatSourceText()
+        let fullText = effectiveChatGPTPrompt + "\n\n" + currentChatSourceText()
         
         if let encodedText = fullText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
            let url = URL(string: "https://chat.openai.com/?prompt=" + encodedText) {
@@ -1877,7 +2049,7 @@ struct ContentView: View {
     }
     
     private func openClaude() {
-        let fullText = claudePrompt + "\n\n" + currentChatSourceText()
+        let fullText = effectiveClaudePrompt + "\n\n" + currentChatSourceText()
         
         if let encodedText = fullText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
            let url = URL(string: "https://claude.ai/new?q=" + encodedText) {
@@ -1886,12 +2058,18 @@ struct ContentView: View {
     }
 
     private func copyPromptToClipboard() {
-        let fullText = aiChatPrompt + "\n\n" + currentChatSourceText()
+        let fullText = effectiveChatGPTPrompt + "\n\n" + currentChatSourceText()
 
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(fullText, forType: .string)
         print("Prompt copied to clipboard")
+    }
+
+    private func startOllamaChat() {
+        ollamaPromptText = effectiveOllamaPrompt + "\n\n" + currentChatSourceText()
+        showingOllamaPanel = true
+        showingSidebar = false
     }
 
     private func currentChatSourceText() -> String {
@@ -2029,6 +2207,10 @@ struct ContentView: View {
                 print("Successfully deleted video assets: \(videoFilename)")
             }
 
+            if pinnedEntryIDs.remove(entry.id.uuidString) != nil {
+                UserDefaults.standard.set(Array(pinnedEntryIDs), forKey: "pinnedEntryIDs")
+            }
+
             // Remove the entry from the entries array
             if let index = entries.firstIndex(where: { $0.id == entry.id }) {
                 entries.remove(at: index)
@@ -2085,6 +2267,39 @@ struct ContentView: View {
         return "Entry \(date)"
     }
     
+    private func exportEntryAsMarkdown(entry: HumanEntry) {
+        exportEntryAsPlainFile(entry: entry, fileExtension: "md", contentType: UTType(filenameExtension: "md") ?? .plainText)
+    }
+
+    private func exportEntryAsText(entry: HumanEntry) {
+        exportEntryAsPlainFile(entry: entry, fileExtension: "txt", contentType: .plainText)
+    }
+
+    private func exportEntryAsPlainFile(entry: HumanEntry, fileExtension: String, contentType: UTType) {
+        if selectedEntryId == entry.id {
+            saveEntry(entry: entry)
+        }
+
+        let fileURL = getDocumentsDirectory().appendingPathComponent(entry.filename)
+
+        do {
+            let entryContent = try String(contentsOf: fileURL, encoding: .utf8)
+            let suggestedFilename = extractTitleFromContent(entryContent, date: entry.date) + "." + fileExtension
+
+            let savePanel = NSSavePanel()
+            savePanel.allowedContentTypes = [contentType]
+            savePanel.nameFieldStringValue = suggestedFilename
+            savePanel.isExtensionHidden = false
+
+            if savePanel.runModal() == .OK, let url = savePanel.url {
+                try entryContent.write(to: url, atomically: true, encoding: .utf8)
+                print("Successfully exported \(fileExtension) to: \(url.path)")
+            }
+        } catch {
+            print("Error exporting \(fileExtension): \(error)")
+        }
+    }
+
     private func exportEntryAsPDF(entry: HumanEntry) {
         // First make sure the current entry is saved
         if selectedEntryId == entry.id {

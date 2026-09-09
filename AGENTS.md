@@ -69,13 +69,23 @@ freewrite/
 ├── freewrite.xcodeproj/          # Xcode project file
 ├── freewrite/
 │   ├── freewriteApp.swift        # App entry point
-│   ├── ContentView.swift         # Main view (1400+ lines)
+│   ├── ContentView.swift         # Main view (2200+ lines)
 │   ├── VideoRecordingView.swift  # Video recording interface
 │   ├── VideoPlayerView.swift     # Video playback interface
+│   ├── OllamaService.swift       # Local Ollama HTTP client (model list + streaming generate)
+│   ├── OllamaPanelView.swift     # Offline AI chat side panel (streamed response UI)
+│   ├── SettingsView.swift        # Settings sheet: AI prompts + Ollama config (tabbed)
+│   ├── Prompts.swift             # Default AI prompt text (ChatGPT/Claude/Ollama)
+│   ├── AppSettingsKeys.swift     # Shared UserDefaults keys/defaults
 │   └── freewrite.entitlements    # App permissions
+├── build.sh                       # CLI-only build (swiftc + codesign) when Xcode isn't installed
 ├── CLAUDE.md                     # This file
 └── AGENTS.md                     # Duplicate of this file
 ```
+
+**Xcode project note**: the target uses a `PBXFileSystemSynchronizedRootGroup` (Xcode 16+), so any
+`.swift` file dropped under `freewrite/freewrite/` is automatically included in the build — no
+manual `.pbxproj` editing needed when adding new source files.
 
 ## Data Model
 
@@ -323,6 +333,8 @@ Required entitlements in `freewrite.entitlements`:
 ```xml
 <key>com.apple.security.app-sandbox</key>
 <true/>
+<key>com.apple.security.network.client</key>
+<true/>
 <key>com.apple.security.files.user-selected.read-write</key>
 <true/>
 <key>com.apple.security.device.camera</key>
@@ -332,6 +344,9 @@ Required entitlements in `freewrite.entitlements`:
 <key>com.apple.security.personal-information.speech-recognition</key>
 <true/>
 ```
+
+`com.apple.security.network.client` is required for the Ollama integration — App Sandbox blocks
+all outgoing sockets, including `localhost`, without it.
 
 Privacy usage descriptions (in Xcode project build settings):
 
@@ -776,6 +791,105 @@ if let encodedText = fullText.addingPercentEncoding(withAllowedCharacters: .urlQ
 - URLs >6000 chars fail in some browsers
 - If too long, shows "Copy Prompt" button instead
 - Copies to clipboard for manual paste
+
+**Prompts are user-editable**: `aiChatPrompt`/`claudePrompt` are no longer hardcoded constants.
+`ContentView` computes `effectiveChatGPTPrompt` / `effectiveClaudePrompt` / `effectiveOllamaPrompt`
+from `@AppStorage` values (`AppSettingsKeys.customChatGPTPrompt` etc.) that fall back to
+`PromptLibrary.defaultChatGPTPrompt` / `.defaultClaudePrompt` / `.defaultOllamaPrompt`
+(`Prompts.swift`) when empty. Edited via the Settings sheet (see below).
+
+### AI Chat: Offline (Ollama)
+
+Alongside ChatGPT/Claude (which open a browser tab with a URL-encoded prompt), the Chat popover
+has an **"Ollama (Offline)"** option that talks to a local Ollama server over HTTP — no browser,
+no account, no data leaving the machine. Unlike the ChatGPT/Claude paths, it isn't gated by the
+6000-char URL-length check (there's no URL involved), only by the same "guide text" / "write ≥350
+chars first" gating that governs whether chat is offered at all.
+
+**`OllamaService.swift`** (`@MainActor final class OllamaService: ObservableObject`):
+- `fetchModels(endpoint:)` — `GET {endpoint}/api/tags`, populates `availableModels: [String]`
+- `generate(endpoint:model:prompt:)` — `POST {endpoint}/api/generate` with `stream: true`, reads
+  `URLSession.bytes(for:).lines`, decodes each line as a `{"response":"...","done":false}` JSON
+  chunk, appends `response` fragments to `@Published var responseText` as they arrive (true
+  token-by-token streaming, not a fake typewriter effect)
+- `cancel()` cancels the in-flight `Task`
+- URL building (`apiURL(endpoint:path:)`) trims a trailing `/` and uses `URL.appendingPathComponent`
+  rather than `URLComponents` — **do not** build the request URL via
+  `URLComponents.path = ...; components.url`, since `URLComponents.url` returns `nil` whenever the
+  resulting path doesn't start with `/` and there's a host component (RFC 3986); this was a real
+  bug caught during development (endpoint "http://localhost:11434" produced a nil URL).
+
+**`OllamaPanelView.swift`**: side panel matching the History sidebar's visual language (fixed
+width, header/divider/scroll-body/footer), inserted into `ContentView`'s outer `HStack` alongside
+the History sidebar, gated on `showingOllamaPanel`. Mutually exclusive with the History sidebar
+(opening one closes the other). Header has a model picker (persisted via
+`AppSettingsKeys.ollamaModel`) + refresh button; footer has Generate/Regenerate/Stop, Copy, and
+Insert (appends the response into the current entry's `text` — text entries only).
+
+`ContentView.startOllamaChat()` builds the prompt (`effectiveOllamaPrompt + "\n\n" +
+currentChatSourceText()`) and opens the panel; the panel's own `onAppear` fetches models and
+kicks off the first generation.
+
+### Settings (SettingsView.swift)
+
+Gear-icon button in the bottom-right utility bar opens a `.sheet` with a `TabView` (two tabs):
+- **Ollama** tab: endpoint field (`AppSettingsKeys.ollamaEndpoint`, default
+  `http://localhost:11434`), "Test Connection" (calls `OllamaService.fetchModels`), default-model
+  picker
+- **Prompts** tab: a segmented control switches between ChatGPT/Claude/Ollama, each editing its
+  `AppSettingsKeys.customXPrompt` value in one large `TextEditor` with "Reset to Default" (clears
+  the stored override so `PromptLibrary`'s default takes over again)
+
+### Sidebar Search & Writing Streak
+
+The History sidebar (`ContentView.swift`) is `280pt` wide (was `200pt`, widened to fit the search
+field and streak badge comfortably) and has:
+- A **search field** (`sidebarSearchQuery` state) filtering `entries` via
+  `matchesSearch(_:query:)` — matches on `previewText`, `date`, and (for a non-empty query) the
+  full entry content read from disk, or the video transcript for video entries. Filtered list is
+  `filteredSidebarEntries`; not indexed/cached, matching the app's existing "just read the file"
+  style in `loadExistingEntries()` — fine at personal-journal entry counts.
+- A **streak badge** (`writingStreak` computed property, "🔥 N") next to the "History" header —
+  counts consecutive days backward from today (or from yesterday if today has no entry yet, so an
+  in-progress day doesn't zero the streak) using each entry's parsed filename timestamp.
+- A **pin/favorite star** per row (`pinnedEntryIDs: Set<String>`, persisted to `UserDefaults` key
+  `"pinnedEntryIDs"` as an array of UUID strings — not file-based, since entry files themselves
+  aren't touched). `filteredSidebarEntries` does a **stable** sort (`Array.sorted` is
+  stability-guaranteed since Swift 5) that bubbles pinned entries to the top while preserving the
+  existing date-desc order within each group. `togglePin(_:)` toggles membership + persists;
+  `deleteEntry` also removes the id from the set so it doesn't leak.
+
+### Word Count
+
+`currentWordCount` (computed from `text`, whitespace-split) is shown in the bottom-right utility
+bar just before the timer, only when viewing a text entry (hidden for video entries where there's
+no text editor).
+
+### Font Controls (Dropdowns)
+
+The font-size and font-family controls in the bottom-left nav are `Menu`s (`.menuStyle(.borderlessButton)`),
+not a row of always-visible buttons — replaced to save horizontal space. Font-size menu lists
+`fontSizes` with a checkmark on the current value; font-family menu has Lato/Arial/System/Serif/Random,
+same actions as before. `currentFontDisplayName` maps `selectedFont` back to a friendly label for
+the menu's own title (falls back to `currentRandomFont` when a random font is active).
+
+### Export Formats
+
+The sidebar's per-entry export icon is a `Menu` (was a single PDF-export button): "Export as PDF"
+(unchanged, `exportEntryAsPDF`), "Export as Markdown", and "Export as Text" — the latter two both
+go through `exportEntryAsPlainFile(entry:fileExtension:contentType:)`, which just writes the
+entry's raw stored content (already Markdown) under the chosen extension/UTType.
+
+### Ollama Model Pull
+
+`OllamaPanelView`'s empty-models state (`OllamaService.availableModels.isEmpty`) offers an inline
+pull instead of only telling the user to run a terminal command: a text field for the model name +
+"Pull" button, calling `OllamaService.pullModel(endpoint:name:)`. That method streams
+`POST {endpoint}/api/pull` (`{"name":..., "stream": true}`), decoding each line as
+`{"status":"...", "completed":N, "total":M}` / `{"error":"..."}` chunks into `@Published var
+pullStatus` / `pullProgress` (`Double?`, `completed/total`) / `pullError`, and calls
+`fetchModels(endpoint:)` again on success so the newly pulled model shows up in the picker
+immediately. `cancelPull()` cancels the in-flight pull `Task`.
 
 ### PDF Export Implementation
 
