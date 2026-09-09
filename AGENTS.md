@@ -806,13 +806,25 @@ no account, no data leaving the machine. Unlike the ChatGPT/Claude paths, it isn
 6000-char URL-length check (there's no URL involved), only by the same "guide text" / "write ≥350
 chars first" gating that governs whether chat is offered at all.
 
+It's a real **multi-turn conversation**, not a single one-shot Q&A: after the initial reflection,
+the user can type follow-up questions and the model replies with the full conversation as context.
+
 **`OllamaService.swift`** (`@MainActor final class OllamaService: ObservableObject`):
+- `@Published var messages: [OllamaChatMessage]` — the full transcript (`OllamaChatMessage` has
+  `role: .user | .assistant` and `content: String`), rendered as chat bubbles by the panel
 - `fetchModels(endpoint:)` — `GET {endpoint}/api/tags`, populates `availableModels: [String]`
-- `generate(endpoint:model:prompt:)` — `POST {endpoint}/api/generate` with `stream: true`, reads
-  `URLSession.bytes(for:).lines`, decodes each line as a `{"response":"...","done":false}` JSON
-  chunk, appends `response` fragments to `@Published var responseText` as they arrive (true
-  token-by-token streaming, not a fake typewriter effect)
-- `cancel()` cancels the in-flight `Task`
+- `startConversation(endpoint:model:initialPrompt:)` — resets `messages` to a single user turn,
+  then streams the assistant's reply
+- `sendFollowUp(endpoint:model:text:)` — appends a user turn to the existing `messages`, then
+  streams the assistant's reply
+- Both funnel into `streamAssistantReply(endpoint:model:)` (private): `POST {endpoint}/api/chat`
+  with `stream: true` and the **entire message history** as `messages: [{role, content}]` — Ollama's
+  `/api/chat` is stateless per-request, so the client resends the whole transcript each turn. Reads
+  `URLSession.bytes(for:).lines`, decodes each line as `{"message":{"role":"assistant","content":"..."},"done":false}`,
+  appending `content` fragments onto the in-progress assistant message in `messages` as they arrive
+  (true token-by-token streaming). On failure, removes the empty assistant placeholder it had
+  appended so a failed turn doesn't leave a dangling empty bubble.
+- `resetConversation()` / `cancel()` — clear/cancel respectively
 - URL building (`apiURL(endpoint:path:)`) trims a trailing `/` and uses `URL.appendingPathComponent`
   rather than `URLComponents` — **do not** build the request URL via
   `URLComponents.path = ...; components.url`, since `URLComponents.url` returns `nil` whenever the
@@ -822,11 +834,23 @@ chars first" gating that governs whether chat is offered at all.
 **`OllamaPanelView.swift`**: side panel matching the History sidebar's visual language (fixed
 width, header/divider/scroll-body/footer), inserted into `ContentView`'s outer `HStack` alongside
 the History sidebar, gated on `showingOllamaPanel`. Mutually exclusive with the History sidebar
-(opening one closes the other). Header has a model picker (persisted via
-`AppSettingsKeys.ollamaModel`) + refresh button; footer has Generate/Regenerate/Stop, Copy, and
-Insert (appends the response into the current entry's `text` — text entries only).
+(opening one closes the other).
+- Body renders `service.messages` as chat bubbles (`bubble(for:)`) — user turns right-aligned/
+  accent-tinted, assistant turns left-aligned/gray, auto-scrolling to the bottom
+  (`ScrollViewReader` + `.onChange(of: service.messages)`) as new content streams in.
+- Message content is rendered through `markdownText(_:)`, which tries
+  `AttributedString(markdown:options: .init(interpretedSyntax: .full))` and falls back to plain
+  `Text` if parsing fails — so headings/bold/lists/links in a response render properly instead of
+  showing raw `**`/`#` characters.
+- Header has a model picker (persisted via `AppSettingsKeys.ollamaModel`), refresh button, and (once
+  a conversation has started) a "New Chat" button that calls `resetConversation()` + restarts.
+- Footer has an "Ask a follow-up..." `TextField` (multi-line, `axis: .vertical`) + send button
+  wired to `sendFollowUp`, plus Stop (while streaming)/Copy/Insert acting on the **last assistant
+  message** (`lastAssistantMessage`), not the whole transcript.
+- Switching the model picker mid-conversation calls `restart()` (reset + start fresh) rather than
+  continuing the old transcript with a different model.
 
-`ContentView.startOllamaChat()` builds the prompt (`effectiveOllamaPrompt + "\n\n" +
+`ContentView.startOllamaChat()` builds the initial prompt (`effectiveOllamaPrompt + "\n\n" +
 currentChatSourceText()`) and opens the panel; the panel's own `onAppear` fetches models and
 kicks off the first generation.
 

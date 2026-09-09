@@ -8,9 +8,20 @@
 
 import Foundation
 
+struct OllamaChatMessage: Identifiable, Equatable {
+    enum Role: String {
+        case user
+        case assistant
+    }
+
+    let id = UUID()
+    let role: Role
+    var content: String
+}
+
 @MainActor
 final class OllamaService: ObservableObject {
-    @Published var responseText: String = ""
+    @Published var messages: [OllamaChatMessage] = []
     @Published var isStreaming: Bool = false
     @Published var errorMessage: String? = nil
     @Published var availableModels: [String] = []
@@ -30,8 +41,12 @@ final class OllamaService: ObservableObject {
         let models: [Model]
     }
 
-    private struct GenerateChunk: Decodable {
-        let response: String?
+    private struct ChatChunk: Decodable {
+        struct Message: Decodable {
+            let role: String?
+            let content: String?
+        }
+        let message: Message?
         let done: Bool?
     }
 
@@ -66,10 +81,31 @@ final class OllamaService: ObservableObject {
         }
     }
 
-    func generate(endpoint: String, model: String, prompt: String) {
+    /// Starts a fresh conversation: clears history and sends `initialPrompt` as the first
+    /// user turn.
+    func startConversation(endpoint: String, model: String, initialPrompt: String) {
+        messages = [OllamaChatMessage(role: .user, content: initialPrompt)]
+        streamAssistantReply(endpoint: endpoint, model: model)
+    }
+
+    /// Appends a follow-up user message to the existing conversation and streams the
+    /// assistant's reply, with the full message history sent as context each time (Ollama's
+    /// `/api/chat` is stateless per-request — the client owns the transcript).
+    func sendFollowUp(endpoint: String, model: String, text: String) {
+        guard !isStreaming else { return }
+        messages.append(OllamaChatMessage(role: .user, content: text))
+        streamAssistantReply(endpoint: endpoint, model: model)
+    }
+
+    func resetConversation() {
+        cancel()
+        messages = []
+    }
+
+    private func streamAssistantReply(endpoint: String, model: String) {
         cancel()
 
-        guard let url = Self.apiURL(endpoint: endpoint, path: "api/generate") else {
+        guard let url = Self.apiURL(endpoint: endpoint, path: "api/chat") else {
             errorMessage = "That doesn't look like a valid URL."
             return
         }
@@ -78,9 +114,11 @@ final class OllamaService: ObservableObject {
             return
         }
 
-        responseText = ""
         errorMessage = nil
         isStreaming = true
+        let assistantIndex = messages.count
+        messages.append(OllamaChatMessage(role: .assistant, content: ""))
+        let payloadMessages = messages.dropLast().map { ["role": $0.role.rawValue, "content": $0.content] }
 
         streamTask = Task { [weak self] in
             guard let self else { return }
@@ -90,7 +128,7 @@ final class OllamaService: ObservableObject {
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 request.httpBody = try JSONSerialization.data(withJSONObject: [
                     "model": model,
-                    "prompt": prompt,
+                    "messages": payloadMessages,
                     "stream": true
                 ])
 
@@ -102,11 +140,12 @@ final class OllamaService: ObservableObject {
                 for try await line in bytes.lines {
                     if Task.isCancelled { return }
                     guard let data = line.data(using: .utf8),
-                          let chunk = try? JSONDecoder().decode(GenerateChunk.self, from: data) else {
+                          let chunk = try? JSONDecoder().decode(ChatChunk.self, from: data) else {
                         continue
                     }
-                    if let fragment = chunk.response, !fragment.isEmpty {
-                        self.responseText += fragment
+                    if let fragment = chunk.message?.content, !fragment.isEmpty,
+                       assistantIndex < self.messages.count {
+                        self.messages[assistantIndex].content += fragment
                     }
                     if chunk.done == true {
                         break
@@ -115,6 +154,9 @@ final class OllamaService: ObservableObject {
             } catch {
                 if !Task.isCancelled {
                     self.errorMessage = Self.friendlyMessage(for: error)
+                    if assistantIndex < self.messages.count, self.messages[assistantIndex].content.isEmpty {
+                        self.messages.remove(at: assistantIndex)
+                    }
                 }
             }
             self.isStreaming = false

@@ -2,9 +2,10 @@
 //  OllamaPanelView.swift
 //  freewrite
 //
-//  Side panel showing a streamed, fully-offline AI reflection from a local
+//  Side panel showing a streamed, fully-offline AI conversation from a local
 //  Ollama server. Mirrors the visual language of the History sidebar in
-//  ContentView.swift (fixed width, header, divider, scroll body).
+//  ContentView.swift (fixed width, header, divider, scroll body). Supports
+//  multi-turn follow-up questions via Ollama's /api/chat endpoint.
 //
 
 import SwiftUI
@@ -22,6 +23,7 @@ struct OllamaPanelView: View {
     @State private var didCopy = false
     @State private var hasStarted = false
     @State private var pullModelName: String = ""
+    @State private var followUpText: String = ""
 
     private var textColor: Color {
         colorScheme == .light ? .gray : .gray.opacity(0.8)
@@ -29,6 +31,10 @@ struct OllamaPanelView: View {
 
     private var textHoverColor: Color {
         colorScheme == .light ? .black : .white
+    }
+
+    private var lastAssistantMessage: String? {
+        service.messages.last(where: { $0.role == .assistant })?.content
     }
 
     var body: some View {
@@ -43,7 +49,7 @@ struct OllamaPanelView: View {
 
             footer
         }
-        .frame(width: 320)
+        .frame(width: 340)
         .background(Color(colorScheme == .light ? .white : NSColor.black))
         .onAppear {
             Task { await refreshModels() }
@@ -62,6 +68,16 @@ struct OllamaPanelView: View {
             }
 
             Spacer()
+
+            if hasStarted {
+                Button(action: restart) {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 11))
+                        .foregroundColor(textColor)
+                }
+                .buttonStyle(.plain)
+                .help("Start a new conversation")
+            }
 
             Button(action: onClose) {
                 Image(systemName: "xmark")
@@ -86,17 +102,19 @@ struct OllamaPanelView: View {
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        Text(service.responseText.isEmpty && service.isStreaming ? "Thinking..." : service.responseText)
-                            .font(.system(size: 13))
-                            .foregroundColor(.primary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 4)
-                            .id("responseBottom")
+                        LazyVStack(alignment: .leading, spacing: 12) {
+                            ForEach(service.messages) { message in
+                                bubble(for: message)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 4)
+                        .id("bottomAnchor")
                     }
-                    .onChange(of: service.responseText) { _, _ in
-                        proxy.scrollTo("responseBottom", anchor: .bottom)
+                    .onChange(of: service.messages) { _, _ in
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            proxy.scrollTo("bottomAnchor", anchor: .bottom)
+                        }
                     }
                 }
             }
@@ -104,8 +122,39 @@ struct OllamaPanelView: View {
         .padding(.top, 8)
         .frame(maxHeight: .infinity)
         .onChange(of: selectedModel) { _, _ in
-            start()
+            restart()
         }
+    }
+
+    private func bubble(for message: OllamaChatMessage) -> some View {
+        let isUser = message.role == .user
+        let isThinking = message.content.isEmpty && service.isStreaming && message.id == service.messages.last?.id
+
+        return HStack {
+            if isUser { Spacer(minLength: 32) }
+
+            markdownText(isThinking ? "Thinking..." : message.content)
+                .font(.system(size: 13))
+                .foregroundColor(isThinking ? .secondary : .primary)
+                .textSelection(.enabled)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isUser ? Color.accentColor.opacity(0.15) : Color.gray.opacity(0.08))
+                )
+
+            if !isUser { Spacer(minLength: 32) }
+        }
+        .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+    }
+
+    /// Renders basic Markdown (bold, italics, headings, lists, links) with a plain-text fallback.
+    private func markdownText(_ content: String) -> Text {
+        if let attributed = try? AttributedString(markdown: content, options: .init(interpretedSyntax: .full)) {
+            return Text(attributed)
+        }
+        return Text(content)
     }
 
     private var modelPicker: some View {
@@ -193,51 +242,73 @@ struct OllamaPanelView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 8) {
-            Button(action: {
+        VStack(spacing: 8) {
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField("Ask a follow-up...", text: $followUpText, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...4)
+                    .font(.system(size: 13))
+                    .disabled(selectedModel.isEmpty)
+                    .onSubmit { sendFollowUp() }
+
+                Button(action: sendFollowUp) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || service.isStreaming ? textColor.opacity(0.4) : .accentColor)
+                }
+                .buttonStyle(.plain)
+                .disabled(followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || service.isStreaming)
+            }
+
+            HStack(spacing: 8) {
                 if service.isStreaming {
-                    service.cancel()
-                } else {
-                    start()
+                    Button("Stop") { service.cancel() }
+                        .buttonStyle(.plain)
+                        .foregroundColor(textColor)
                 }
-            }) {
-                Text(service.isStreaming ? "Stop" : (hasStarted ? "Regenerate" : "Generate"))
-                    .font(.system(size: 12))
-            }
-            .buttonStyle(.plain)
-            .foregroundColor(textColor)
-            .disabled(selectedModel.isEmpty)
 
-            Spacer()
+                Spacer()
 
-            Button(action: {
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                pasteboard.setString(service.responseText, forType: .string)
-                didCopy = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                    didCopy = false
-                }
-            }) {
-                Text(didCopy ? "Copied!" : "Copy")
-                    .font(.system(size: 12))
-            }
-            .buttonStyle(.plain)
-            .foregroundColor(textColor)
-            .disabled(service.responseText.isEmpty)
-
-            if canInsert {
-                Button(action: { onInsert(service.responseText) }) {
-                    Text("Insert")
-                        .font(.system(size: 12))
+                Button(action: copyLastResponse) {
+                    Text(didCopy ? "Copied!" : "Copy")
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(textColor)
-                .disabled(service.responseText.isEmpty)
+                .disabled(lastAssistantMessage == nil)
+
+                if canInsert {
+                    Button(action: {
+                        if let last = lastAssistantMessage { onInsert(last) }
+                    }) {
+                        Text("Insert")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(textColor)
+                    .disabled(lastAssistantMessage == nil)
+                }
             }
+            .font(.system(size: 12))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+    }
+
+    private func copyLastResponse() {
+        guard let last = lastAssistantMessage else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(last, forType: .string)
+        didCopy = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            didCopy = false
+        }
+    }
+
+    private func sendFollowUp() {
+        let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !service.isStreaming else { return }
+        followUpText = ""
+        service.sendFollowUp(endpoint: endpoint, model: selectedModel, text: trimmed)
     }
 
     private func refreshModels() async {
@@ -253,6 +324,13 @@ struct OllamaPanelView: View {
     private func start() {
         guard !selectedModel.isEmpty else { return }
         hasStarted = true
-        service.generate(endpoint: endpoint, model: selectedModel, prompt: prompt)
+        service.startConversation(endpoint: endpoint, model: selectedModel, initialPrompt: prompt)
+    }
+
+    private func restart() {
+        followUpText = ""
+        service.resetConversation()
+        hasStarted = false
+        start()
     }
 }
