@@ -43,6 +43,7 @@ cp "$ROOT/freewrite/freewriteApp.swift" \
    "$ROOT/freewrite/OllamaService.swift" \
    "$ROOT/freewrite/OllamaPanelView.swift" \
    "$ROOT/freewrite/SettingsView.swift" \
+   "$ROOT/freewrite/VoiceDictationService.swift" \
    "$SRC_DIR/"
 python3 - "$SRC_DIR/ContentView.swift" <<'PY'
 import sys
@@ -60,7 +61,7 @@ swiftc -O \
     -target arm64-apple-macos14.0 \
     -parse-as-library \
     "$SRC_DIR/freewriteApp.swift" "$SRC_DIR/ContentView.swift" "$SRC_DIR/VideoPlayerView.swift" "$SRC_DIR/VideoRecordingView.swift" \
-    "$SRC_DIR/Prompts.swift" "$SRC_DIR/AppSettingsKeys.swift" "$SRC_DIR/OllamaService.swift" "$SRC_DIR/OllamaPanelView.swift" "$SRC_DIR/SettingsView.swift" \
+    "$SRC_DIR/Prompts.swift" "$SRC_DIR/AppSettingsKeys.swift" "$SRC_DIR/OllamaService.swift" "$SRC_DIR/OllamaPanelView.swift" "$SRC_DIR/SettingsView.swift" "$SRC_DIR/VoiceDictationService.swift" \
     -o "$APP/Contents/MacOS/freewrite" \
     -framework SwiftUI -framework AppKit -framework AVFoundation -framework Speech -framework Combine -framework PDFKit
 
@@ -92,9 +93,9 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
     <key>NSCameraUsageDescription</key>
     <string>Freewrite needs camera access to record video entries.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Freewrite needs microphone access to record audio with your video entries.</string>
+    <string>Freewrite needs microphone access to record audio with your video entries and to dictate follow-up questions in AI chat.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Freewrite uses speech recognition to transcribe your video entries.</string>
+    <string>Freewrite uses speech recognition to transcribe video entries and to dictate follow-up questions in AI chat.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>

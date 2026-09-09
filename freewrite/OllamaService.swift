@@ -8,8 +8,8 @@
 
 import Foundation
 
-struct OllamaChatMessage: Identifiable, Equatable {
-    enum Role: String {
+struct OllamaChatMessage: Identifiable, Equatable, Codable {
+    enum Role: String, Codable {
         case user
         case assistant
     }
@@ -100,6 +100,12 @@ final class OllamaService: ObservableObject {
     func resetConversation() {
         cancel()
         messages = []
+    }
+
+    /// Loads a previously-saved transcript without starting a new generation.
+    func restoreConversation(_ savedMessages: [OllamaChatMessage]) {
+        cancel()
+        messages = savedMessages
     }
 
     private func streamAssistantReply(endpoint: String, model: String) {

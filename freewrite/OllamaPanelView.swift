@@ -5,7 +5,8 @@
 //  Side panel showing a streamed, fully-offline AI conversation from a local
 //  Ollama server. Mirrors the visual language of the History sidebar in
 //  ContentView.swift (fixed width, header, divider, scroll body). Supports
-//  multi-turn follow-up questions via Ollama's /api/chat endpoint.
+//  multi-turn follow-up questions via Ollama's /api/chat endpoint, voice
+//  dictation for follow-ups, and quick tone/persona presets.
 //
 
 import SwiftUI
@@ -13,17 +14,21 @@ import SwiftUI
 struct OllamaPanelView: View {
     @ObservedObject var service: OllamaService
     let endpoint: String
-    let prompt: String
+    let basePrompt: String
+    let sourceText: String
     let colorScheme: ColorScheme
     let canInsert: Bool
     let onInsert: (String) -> Void
     let onClose: () -> Void
 
     @AppStorage(AppSettingsKeys.ollamaModel) private var selectedModel: String = ""
+    @State private var selectedPersona: OllamaPersona = .defaultTone
     @State private var didCopy = false
     @State private var hasStarted = false
     @State private var pullModelName: String = ""
     @State private var followUpText: String = ""
+    @State private var suppressModelChangeRestart = false
+    @StateObject private var dictation = VoiceDictationService()
 
     private var textColor: Color {
         colorScheme == .light ? .gray : .gray.opacity(0.8)
@@ -35,6 +40,10 @@ struct OllamaPanelView: View {
 
     private var lastAssistantMessage: String? {
         service.messages.last(where: { $0.role == .assistant })?.content
+    }
+
+    private var effectivePrompt: String {
+        (selectedPersona.promptOverride ?? basePrompt) + "\n\n" + sourceText
     }
 
     var body: some View {
@@ -93,7 +102,7 @@ struct OllamaPanelView: View {
     @ViewBuilder
     private func body(for service: OllamaService) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            modelPicker
+            controlsRow
 
             if service.availableModels.isEmpty && !service.isLoadingModels && service.errorMessage == nil {
                 emptyModelsState
@@ -122,6 +131,13 @@ struct OllamaPanelView: View {
         .padding(.top, 8)
         .frame(maxHeight: .infinity)
         .onChange(of: selectedModel) { _, _ in
+            if suppressModelChangeRestart {
+                suppressModelChangeRestart = false
+                return
+            }
+            restart()
+        }
+        .onChange(of: selectedPersona) { _, _ in
             restart()
         }
     }
@@ -157,7 +173,7 @@ struct OllamaPanelView: View {
         return Text(content)
     }
 
-    private var modelPicker: some View {
+    private var controlsRow: some View {
         HStack(spacing: 8) {
             Picker("", selection: $selectedModel) {
                 if selectedModel.isEmpty {
@@ -169,6 +185,24 @@ struct OllamaPanelView: View {
             }
             .labelsHidden()
             .frame(maxWidth: .infinity)
+
+            Menu {
+                ForEach(OllamaPersona.allCases) { persona in
+                    Button(action: { selectedPersona = persona }) {
+                        if selectedPersona == persona {
+                            Label(persona.rawValue, systemImage: "checkmark")
+                        } else {
+                            Text(persona.rawValue)
+                        }
+                    }
+                }
+            } label: {
+                Text(selectedPersona.rawValue)
+                    .font(.system(size: 12))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Tone preset")
 
             Button(action: { Task { await refreshModels() } }) {
                 if service.isLoadingModels {
@@ -243,7 +277,21 @@ struct OllamaPanelView: View {
 
     private var footer: some View {
         VStack(spacing: 8) {
+            if let dictationError = dictation.errorMessage {
+                Text(dictationError)
+                    .font(.system(size: 11))
+                    .foregroundColor(.red)
+            }
+
             HStack(alignment: .bottom, spacing: 8) {
+                Button(action: toggleDictation) {
+                    Image(systemName: dictation.isRecording ? "mic.fill" : "mic")
+                        .font(.system(size: 14))
+                        .foregroundColor(dictation.isRecording ? .red : textColor)
+                }
+                .buttonStyle(.plain)
+                .help(dictation.isRecording ? "Stop dictation" : "Dictate follow-up")
+
                 TextField("Ask a follow-up...", text: $followUpText, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...4)
@@ -291,6 +339,18 @@ struct OllamaPanelView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+        .onChange(of: dictation.transcript) { _, newValue in
+            guard dictation.isRecording else { return }
+            followUpText = newValue
+        }
+    }
+
+    private func toggleDictation() {
+        if dictation.isRecording {
+            dictation.stop()
+        } else {
+            dictation.start()
+        }
     }
 
     private func copyLastResponse() {
@@ -308,15 +368,22 @@ struct OllamaPanelView: View {
         let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !service.isStreaming else { return }
         followUpText = ""
+        if dictation.isRecording { dictation.stop() }
         service.sendFollowUp(endpoint: endpoint, model: selectedModel, text: trimmed)
     }
 
     private func refreshModels() async {
         await service.fetchModels(endpoint: endpoint)
         if selectedModel.isEmpty || !service.availableModels.contains(selectedModel) {
+            suppressModelChangeRestart = true
             selectedModel = service.availableModels.first ?? ""
         }
-        if !hasStarted, !selectedModel.isEmpty {
+        guard !hasStarted else { return }
+        if !service.messages.isEmpty {
+            // A saved conversation was already restored into the service before this view
+            // appeared (see ContentView.startOllamaChat) — don't overwrite it.
+            hasStarted = true
+        } else if !selectedModel.isEmpty {
             start()
         }
     }
@@ -324,7 +391,7 @@ struct OllamaPanelView: View {
     private func start() {
         guard !selectedModel.isEmpty else { return }
         hasStarted = true
-        service.startConversation(endpoint: endpoint, model: selectedModel, initialPrompt: prompt)
+        service.startConversation(endpoint: endpoint, model: selectedModel, initialPrompt: effectivePrompt)
     }
 
     private func restart() {

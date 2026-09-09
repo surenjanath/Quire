@@ -138,7 +138,8 @@ struct ContentView: View {
     @State private var showingSettings = false
     @State private var isHoveringSettings = false
     @State private var showingOllamaPanel = false
-    @State private var ollamaPromptText: String = ""
+    @State private var ollamaSourceText: String = ""
+    @State private var ollamaChatEntryId: UUID? = nil
     @StateObject private var ollamaService = OllamaService()
     @State private var sidebarSearchQuery: String = ""
     @State private var pinnedEntryIDs: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "pinnedEntryIDs") ?? [])
@@ -200,6 +201,47 @@ struct ContentView: View {
 
         return directory
     }()
+
+    private let chatsDirectory: URL = {
+        let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Freewrite")
+            .appendingPathComponent("Chats")
+
+        if !FileManager.default.fileExists(atPath: directory.path) {
+            do {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                print("Successfully created Freewrite/Chats directory")
+            } catch {
+                print("Error creating chats directory: \(error)")
+            }
+        }
+
+        return directory
+    }()
+
+    private func chatHistoryURL(for entry: HumanEntry) -> URL {
+        let base = (entry.filename as NSString).deletingPathExtension
+        return chatsDirectory.appendingPathComponent(base + ".json")
+    }
+
+    private func loadChatHistory(for entry: HumanEntry) -> [OllamaChatMessage]? {
+        let url = chatHistoryURL(for: entry)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode([OllamaChatMessage].self, from: data)
+    }
+
+    private func saveChatHistory(_ messages: [OllamaChatMessage], for entry: HumanEntry) {
+        let url = chatHistoryURL(for: entry)
+        guard let data = try? JSONEncoder().encode(messages) else { return }
+        try? data.write(to: url, options: .atomic)
+    }
+
+    private func deleteChatHistory(for entry: HumanEntry) {
+        let url = chatHistoryURL(for: entry)
+        if fileManager.fileExists(atPath: url.path) {
+            try? fileManager.removeItem(at: url)
+        }
+    }
 
     private let thumbnailMemoryCache: NSCache<NSString, NSImage> = {
         let cache = NSCache<NSString, NSImage>()
@@ -1777,7 +1819,8 @@ struct ContentView: View {
                 OllamaPanelView(
                     service: ollamaService,
                     endpoint: ollamaEndpoint,
-                    prompt: ollamaPromptText,
+                    basePrompt: effectiveOllamaPrompt,
+                    sourceText: ollamaSourceText,
                     colorScheme: colorScheme,
                     canInsert: !isViewingVideoEntry,
                     onInsert: { response in
@@ -1808,6 +1851,15 @@ struct ContentView: View {
                 .zIndex(10)
             }
         }
+        .background(
+            Button("") {
+                if canOfferOllamaChat() {
+                    startOllamaChat()
+                }
+            }
+            .keyboardShortcut("o", modifiers: [.command, .shift])
+            .hidden()
+        )
         .frame(minWidth: 1100, minHeight: 600)
         .animation(.easeInOut(duration: 0.2), value: showingSidebar)
         .preferredColorScheme(colorScheme)
@@ -1822,6 +1874,15 @@ struct ContentView: View {
             if !isShowing {
                 clearVideoRecordingPreparationState()
             }
+        }
+        .onChange(of: ollamaService.isStreaming) { _, isStreaming in
+            // Persist once a turn finishes streaming, rather than on every token.
+            guard !isStreaming,
+                  let ollamaChatEntryId,
+                  let entry = entries.first(where: { $0.id == ollamaChatEntryId }) else {
+                return
+            }
+            saveChatHistory(ollamaService.messages, for: entry)
         }
         .onChange(of: text) { _ in
             // Save current entry when text changes
@@ -2066,8 +2127,31 @@ struct ContentView: View {
         print("Prompt copied to clipboard")
     }
 
+    /// Same "guide text" / "write ≥350 chars first" gating the Chat popover uses to decide
+    /// whether to offer chat at all — reused so the Cmd+Shift+O shortcut can't bypass it.
+    private func canOfferOllamaChat() -> Bool {
+        guard currentVideoURL == nil else { return true }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("hi. my name is farza.") { return false }
+        if text.count < 350 { return false }
+        return true
+    }
+
     private func startOllamaChat() {
-        ollamaPromptText = effectiveOllamaPrompt + "\n\n" + currentChatSourceText()
+        ollamaSourceText = currentChatSourceText()
+
+        if let selectedEntryId, let currentEntry = entries.first(where: { $0.id == selectedEntryId }) {
+            ollamaChatEntryId = currentEntry.id
+            if let savedHistory = loadChatHistory(for: currentEntry), !savedHistory.isEmpty {
+                ollamaService.restoreConversation(savedHistory)
+            } else {
+                ollamaService.resetConversation()
+            }
+        } else {
+            ollamaChatEntryId = nil
+            ollamaService.resetConversation()
+        }
+
         showingOllamaPanel = true
         showingSidebar = false
     }
@@ -2210,6 +2294,8 @@ struct ContentView: View {
             if pinnedEntryIDs.remove(entry.id.uuidString) != nil {
                 UserDefaults.standard.set(Array(pinnedEntryIDs), forKey: "pinnedEntryIDs")
             }
+
+            deleteChatHistory(for: entry)
 
             // Remove the entry from the entries array
             if let index = entries.firstIndex(where: { $0.id == entry.id }) {

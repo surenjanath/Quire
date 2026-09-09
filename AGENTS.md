@@ -72,10 +72,11 @@ freewrite/
 │   ├── ContentView.swift         # Main view (2200+ lines)
 │   ├── VideoRecordingView.swift  # Video recording interface
 │   ├── VideoPlayerView.swift     # Video playback interface
-│   ├── OllamaService.swift       # Local Ollama HTTP client (model list + streaming generate)
-│   ├── OllamaPanelView.swift     # Offline AI chat side panel (streamed response UI)
+│   ├── OllamaService.swift       # Local Ollama HTTP client (model list, multi-turn chat, pull)
+│   ├── OllamaPanelView.swift     # Offline AI chat side panel (chat bubbles, follow-ups, personas)
+│   ├── VoiceDictationService.swift # Mic-only speech-to-text for dictating chat follow-ups
 │   ├── SettingsView.swift        # Settings sheet: AI prompts + Ollama config (tabbed)
-│   ├── Prompts.swift             # Default AI prompt text (ChatGPT/Claude/Ollama)
+│   ├── Prompts.swift             # Default AI prompts + Ollama persona presets
 │   ├── AppSettingsKeys.swift     # Shared UserDefaults keys/defaults
 │   └── freewrite.entitlements    # App permissions
 ├── build.sh                       # CLI-only build (swiftc + codesign) when Xcode isn't installed
@@ -352,8 +353,8 @@ Privacy usage descriptions (in Xcode project build settings):
 
 ```
 INFOPLIST_KEY_NSCameraUsageDescription = "Freewrite needs camera access to record video entries."
-INFOPLIST_KEY_NSMicrophoneUsageDescription = "Freewrite needs microphone access to record audio with your video entries."
-INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Freewrite uses speech recognition to transcribe your video entries."
+INFOPLIST_KEY_NSMicrophoneUsageDescription = "Freewrite needs microphone access to record audio with your video entries and to dictate follow-up questions in AI chat."
+INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Freewrite uses speech recognition to transcribe video entries and to dictate follow-up questions in AI chat."
 ```
 
 ## Technical Nuances & Implementation Details
@@ -914,6 +915,53 @@ pull instead of only telling the user to run a terminal command: a text field fo
 pullStatus` / `pullProgress` (`Double?`, `completed/total`) / `pullError`, and calls
 `fetchModels(endpoint:)` again on success so the newly pulled model shows up in the picker
 immediately. `cancelPull()` cancels the in-flight pull `Task`.
+
+### Ollama Chat Persistence
+
+Each entry's Ollama conversation is saved to its own JSON file at
+`~/Documents/Freewrite/Chats/[entry-base].json` (same `[UUID]-[timestamp]` base as the entry's
+`.md`/video-directory naming — see `chatHistoryURL(for:)`), containing the full
+`[OllamaChatMessage]` transcript (`OllamaChatMessage` is `Codable`). `ContentView.startOllamaChat()`
+loads any existing history and calls `ollamaService.restoreConversation(_:)` *before* showing the
+panel; `OllamaPanelView.refreshModels()` detects a non-empty `service.messages` on first appearance
+and marks itself started without regenerating. Saving happens on
+`.onChange(of: ollamaService.isStreaming)` transitioning to `false` (i.e., once each turn finishes
+streaming) rather than on every token, to avoid excessive disk I/O. `deleteEntry` also deletes the
+matching chat JSON file.
+
+**Race avoided**: `OllamaPanelView`'s model picker auto-selects a default model on first load,
+which would normally fire `.onChange(of: selectedModel) { restart() }` and wipe a just-restored
+conversation. A `suppressModelChangeRestart` flag set right before that programmatic assignment
+(and consumed by the very next `onChange` firing) distinguishes "we picked this" from "the user
+picked this" so only an explicit user-initiated model switch mid-conversation triggers a restart.
+
+### Voice Dictation for Follow-ups
+
+`VoiceDictationService.swift` is a small, self-contained `SFSpeechRecognizer` +
+`AVAudioEngine`-based dictation service — deliberately separate from `VideoRecordingView`'s speech
+transcription, which is tied to an `AVCaptureSession`/camera. This one taps the default microphone
+input directly (`audioEngine.inputNode.installTap`), feeds buffers into a
+`SFSpeechAudioBufferRecognitionRequest`, and publishes live partial results as `transcript`. The mic
+button in `OllamaPanelView`'s footer toggles it; while recording, `transcript` is mirrored live into
+`followUpText` (`.onChange(of: dictation.transcript)`) so the user sees it fill in as they talk, and
+can still edit before sending. No new entitlements needed — `com.apple.security.device.audio-input`
+and `com.apple.security.personal-information.speech-recognition` already exist for video recording.
+
+### Ollama Persona Presets
+
+`OllamaPersona` (`Prompts.swift`): `.defaultTone` (`promptOverride == nil`, meaning "use whatever
+prompt Settings has configured"), `.therapist`, `.devilsAdvocate`, `.hypeFriend` — each with its own
+full prompt text. A `Menu` next to the model picker in `OllamaPanelView` lets the user swap tone
+mid-session without opening Settings; `effectivePrompt` composes
+`(selectedPersona.promptOverride ?? basePrompt) + "\n\n" + sourceText`, and switching persona calls
+`restart()` (a persona change only makes sense as a fresh conversation, not applied retroactively).
+
+### Keyboard Shortcut: Cmd+Shift+O
+
+A hidden `Button` (`.hidden()`, attached via `.background(...)` on the root view) with
+`.keyboardShortcut("o", modifiers: [.command, .shift])` opens the Ollama panel directly for the
+current entry, skipping the Chat popover. It's gated by `canOfferOllamaChat()` — the same "guide
+text" / "write ≥350 chars first" checks the popover uses — so the shortcut can't bypass that gating.
 
 ### PDF Export Implementation
 
