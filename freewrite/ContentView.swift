@@ -87,13 +87,14 @@ struct ContentView: View {
     @State private var text: String = ""  // Remove initial welcome text since we'll handle it in createNewEntry
     
     @State private var isFullscreen = false
-    @State private var selectedFont: String = "Lato-Regular"
+    @AppStorage(AppSettingsKeys.selectedFont) private var selectedFont: String = AppSettingsDefaults.selectedFont
     @State private var currentRandomFont: String = ""
-    @State private var timeRemaining: Int = 900  // Changed to 900 seconds (15 minutes)
+    @AppStorage(AppSettingsKeys.preferredTimerSeconds) private var preferredTimerSeconds: Int = AppSettingsDefaults.timerSeconds
+    @State private var timeRemaining: Int = AppSettingsDefaults.timerSeconds
     @State private var timerIsRunning = false
     @State private var isHoveringTimer = false
     @State private var isHoveringFullscreen = false
-    @State private var fontSize: CGFloat = 18
+    @AppStorage(AppSettingsKeys.fontSize) private var storedFontSize: Double = AppSettingsDefaults.fontSize
     @State private var blinkCount = 0
     @State private var isBlinking = false
     @State private var opacity: Double = 1.0
@@ -124,7 +125,7 @@ struct ContentView: View {
     @State private var didCopyPrompt: Bool = false // Add state for copy prompt feedback
     @State private var didCopyTranscript: Bool = false
     @State private var selectedVideoHasTranscript = false
-    @State private var backspaceDisabled = false // Add state for backspace toggle
+    @AppStorage(AppSettingsKeys.backspaceDisabled) private var backspaceDisabled = false
     @State private var isHoveringBackspaceToggle = false // Add state for backspace toggle hover
     @State private var showingVideoRecording = false // Add state for video recording view
     @State private var isHoveringVideoButton = false // Add state for video button hover
@@ -141,6 +142,9 @@ struct ContentView: View {
     @State private var ollamaSourceText: String = ""
     @State private var ollamaChatEntryId: UUID? = nil
     @StateObject private var ollamaService = OllamaService()
+    @StateObject private var editorDictation = VoiceDictationService()
+    @State private var editorDictationBase: String = ""
+    @State private var isHoveringDictate = false
     @State private var sidebarSearchQuery: String = ""
     @State private var pinnedEntryIDs: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "pinnedEntryIDs") ?? [])
     @AppStorage(AppSettingsKeys.customChatGPTPrompt) private var customChatGPTPrompt: String = ""
@@ -152,7 +156,12 @@ struct ContentView: View {
     
     let availableFonts = NSFontManager.shared.availableFontFamilies
     let standardFonts = ["Lato-Regular", "Arial", ".AppleSystemUIFont", "Times New Roman"]
-    let fontSizes: [CGFloat] = [16, 18, 20, 22, 24, 26]
+    let fontSizes: [CGFloat] = WritingPreferences.fontSizes.map { CGFloat($0) }
+
+    private var fontSize: CGFloat {
+        get { CGFloat(WritingPreferences.resolvedFontSize(storedFontSize)) }
+        nonmutating set { storedFontSize = Double(newValue) }
+    }
     let placeholderOptions = [
         "Begin writing",
         "Pick a thought and go",
@@ -267,6 +276,9 @@ struct ContentView: View {
         // Load saved color scheme preference
         let savedScheme = UserDefaults.standard.string(forKey: "colorScheme") ?? "light"
         _colorScheme = State(initialValue: savedScheme == "dark" ? .dark : .light)
+        let storedTimer = UserDefaults.standard.object(forKey: AppSettingsKeys.preferredTimerSeconds) as? Int
+            ?? AppSettingsDefaults.timerSeconds
+        _timeRemaining = State(initialValue: WritingPreferences.resolvedTimerSeconds(storedTimer))
     }
     
     // Modify getDocumentsDirectory to use cached value
@@ -731,6 +743,7 @@ struct ContentView: View {
         guard !isPreparingVideoRecording, !showingVideoRecording else {
             return
         }
+        stopEditorDictation()
 
         showingVideoPermissionPopover = false
         videoPermissionPopoverItems = []
@@ -1096,16 +1109,15 @@ struct ContentView: View {
                                 let now = Date()
                                 if let lastClick = lastClickTime,
                                    now.timeIntervalSince(lastClick) < 0.3 {
-                                    timeRemaining = 900
-                                    timerIsRunning = false
-                                    lastClickTime = nil
+                                    resetTimerToDefault()
                                 } else {
-                                    timerIsRunning.toggle()
+                                    toggleTimer()
                                     lastClickTime = now
                                 }
                             }
                             .buttonStyle(.plain)
                             .foregroundColor(timerColor)
+                            .help("Start or pause timer. Double-click to reset to 15:00. ⌘⇧T")
                             .onHover { hovering in
                                 isHoveringTimer = hovering
                                 isHoveringBottomNav = hovering
@@ -1121,13 +1133,14 @@ struct ContentView: View {
                                         let scrollBuffer = event.deltaY * 0.25
                                         
                                         if abs(scrollBuffer) >= 0.1 {
-                                            let currentMinutes = timeRemaining / 60
                                             NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                                             let direction = -scrollBuffer > 0 ? 5 : -5
-                                            let newMinutes = currentMinutes + direction
-                                            let roundedMinutes = (newMinutes / 5) * 5
-                                            let newTime = roundedMinutes * 60
-                                            timeRemaining = min(max(newTime, 0), 2700)
+                                            let newTime = WritingPreferences.steppedTimerSeconds(
+                                                current: timeRemaining,
+                                                directionMinutes: direction
+                                            )
+                                            timeRemaining = newTime
+                                            preferredTimerSeconds = newTime
                                         }
                                     }
                                     return event
@@ -1431,8 +1444,34 @@ struct ContentView: View {
                                         .foregroundColor(isHoveringBackspaceToggle ? textHoverColor : textColor)
                                 }
                                 .buttonStyle(.plain)
+                                .keyboardShortcut("b", modifiers: [.command, .shift])
+                                .help("Toggle backspace lock. ⌘⇧B")
                                 .onHover { hovering in
                                     isHoveringBackspaceToggle = hovering
+                                    isHoveringBottomNav = hovering
+                                    if hovering {
+                                        NSCursor.pointingHand.push()
+                                    } else {
+                                        NSCursor.pop()
+                                    }
+                                }
+
+                                Text("•")
+                                    .foregroundColor(.gray)
+
+                                Button(action: toggleEditorDictation) {
+                                    Image(systemName: editorDictation.isRecording ? "mic.fill" : "mic")
+                                        .foregroundColor(
+                                            editorDictation.isRecording
+                                                ? .red
+                                                : (isHoveringDictate ? textHoverColor : textColor)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                                .keyboardShortcut("m", modifiers: [.command, .shift])
+                                .help(editorDictation.isRecording ? "Stop dictation. ⌘⇧M" : "Dictate into this entry. ⌘⇧M")
+                                .onHover { hovering in
+                                    isHoveringDictate = hovering
                                     isHoveringBottomNav = hovering
                                     if hovering {
                                         NSCursor.pointingHand.push()
@@ -1446,11 +1485,11 @@ struct ContentView: View {
                             }
 
                             Button(isFullscreen ? "Minimize" : "Fullscreen") {
-                                if let window = NSApplication.shared.windows.first {
-                                    window.toggleFullScreen(nil)
-                                }
+                                toggleFullscreen()
                             }
                             .buttonStyle(.plain)
+                            .keyboardShortcut("f", modifiers: [.command, .control])
+                            .help("Toggle fullscreen. ⌃⌘F")
                             .foregroundColor(isHoveringFullscreen ? textHoverColor : textColor)
                             .onHover { hovering in
                                 isHoveringFullscreen = hovering
@@ -1472,6 +1511,8 @@ struct ContentView: View {
                                     .font(.system(size: 13))
                             }
                             .buttonStyle(.plain)
+                            .keyboardShortcut("n", modifiers: .command)
+                            .help("Create a new entry. ⌘N")
                             .foregroundColor(isHoveringNewEntry ? textHoverColor : textColor)
                             .onHover { hovering in
                                 isHoveringNewEntry = hovering
@@ -1487,15 +1528,13 @@ struct ContentView: View {
                                 .foregroundColor(.gray)
                             
                             // Theme toggle button
-                            Button(action: {
-                                colorScheme = colorScheme == .light ? .dark : .light
-                                // Save preference
-                                UserDefaults.standard.set(colorScheme == .light ? "light" : "dark", forKey: "colorScheme")
-                            }) {
+                            Button(action: toggleTheme) {
                                 Image(systemName: colorScheme == .light ? "moon.fill" : "sun.max.fill")
                                     .foregroundColor(isHoveringThemeToggle ? textHoverColor : textColor)
                             }
                             .buttonStyle(.plain)
+                            .keyboardShortcut("d", modifiers: [.command, .shift])
+                            .help("Toggle light and dark. ⌘⇧D")
                             .onHover { hovering in
                                 isHoveringThemeToggle = hovering
                                 isHoveringBottomNav = hovering
@@ -1510,18 +1549,13 @@ struct ContentView: View {
                                 .foregroundColor(.gray)
 
                             // Version history button
-                            Button(action: {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    if !showingSidebar {
-                                        showingOllamaPanel = false
-                                    }
-                                    showingSidebar.toggle()
-                                }
-                            }) {
+                            Button(action: toggleHistorySidebar) {
                                 Image(systemName: "clock.arrow.circlepath")
                                     .foregroundColor(isHoveringClock ? textHoverColor : textColor)
                             }
                             .buttonStyle(.plain)
+                            .keyboardShortcut("h", modifiers: [.command, .shift])
+                            .help("Show or hide history. ⌘⇧H")
                             .onHover { hovering in
                                 isHoveringClock = hovering
                                 isHoveringBottomNav = hovering
@@ -1543,6 +1577,8 @@ struct ContentView: View {
                                     .foregroundColor(isHoveringSettings ? textHoverColor : textColor)
                             }
                             .buttonStyle(.plain)
+                            .keyboardShortcut(",", modifiers: .command)
+                            .help("Open settings. ⌘,")
                             .onHover { hovering in
                                 isHoveringSettings = hovering
                                 isHoveringBottomNav = hovering
@@ -1852,12 +1888,17 @@ struct ContentView: View {
             }
         }
         .background(
-            Button("") {
-                if canOfferOllamaChat() {
-                    startOllamaChat()
+            Group {
+                Button("") {
+                    if canOfferOllamaChat() {
+                        startOllamaChat()
+                    }
                 }
+                .keyboardShortcut("o", modifiers: [.command, .shift])
+
+                Button("") { toggleTimer() }
+                    .keyboardShortcut("t", modifiers: [.command, .shift])
             }
-            .keyboardShortcut("o", modifiers: [.command, .shift])
             .hidden()
         )
         .frame(minWidth: 1100, minHeight: 600)
@@ -1865,6 +1906,12 @@ struct ContentView: View {
         .preferredColorScheme(colorScheme)
         .onAppear {
             showingSidebar = false  // Hide sidebar by default
+            selectedFont = WritingPreferences.resolvedFont(selectedFont)
+            storedFontSize = WritingPreferences.resolvedFontSize(storedFontSize)
+            preferredTimerSeconds = WritingPreferences.resolvedTimerSeconds(preferredTimerSeconds)
+            if !timerIsRunning {
+                timeRemaining = preferredTimerSeconds
+            }
             loadExistingEntries()
         }
         .sheet(isPresented: $showingSettings) {
@@ -1892,11 +1939,26 @@ struct ContentView: View {
                 saveEntry(entry: currentEntry)
             }
         }
+        .onChange(of: editorDictation.transcript) { _, newValue in
+            guard editorDictation.isRecording, currentVideoURL == nil else { return }
+            text = EditorDictation.combining(base: editorDictationBase, transcript: newValue)
+        }
+        .onChange(of: currentVideoURL) { _, videoURL in
+            if videoURL != nil {
+                stopEditorDictation()
+            }
+        }
+        .onChange(of: showingOllamaPanel) { _, showing in
+            if showing {
+                stopEditorDictation()
+            }
+        }
         .onReceive(timer) { _ in
             if timerIsRunning && timeRemaining > 0 {
                 timeRemaining -= 1
             } else if timeRemaining == 0 {
                 timerIsRunning = false
+                timeRemaining = preferredTimerSeconds
                 if !isHoveringBottomNav {
                     withAnimation(.easeOut(duration: 1.0)) {
                         bottomNavOpacity = 1.0
@@ -2070,7 +2132,54 @@ struct ContentView: View {
         }
     }
     
+    private func toggleTimer() {
+        timerIsRunning.toggle()
+    }
+
+    private func resetTimerToDefault() {
+        timeRemaining = AppSettingsDefaults.timerSeconds
+        preferredTimerSeconds = AppSettingsDefaults.timerSeconds
+        timerIsRunning = false
+        lastClickTime = nil
+    }
+
+    private func toggleTheme() {
+        colorScheme = colorScheme == .light ? .dark : .light
+        UserDefaults.standard.set(colorScheme == .light ? "light" : "dark", forKey: "colorScheme")
+    }
+
+    private func toggleHistorySidebar() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            if !showingSidebar {
+                showingOllamaPanel = false
+            }
+            showingSidebar.toggle()
+        }
+    }
+
+    private func toggleFullscreen() {
+        if let window = NSApplication.shared.windows.first {
+            window.toggleFullScreen(nil)
+        }
+    }
+
+    private func toggleEditorDictation() {
+        guard currentVideoURL == nil else { return }
+        if editorDictation.isRecording {
+            stopEditorDictation()
+        } else {
+            editorDictationBase = text
+            editorDictation.start()
+        }
+    }
+
+    private func stopEditorDictation() {
+        guard editorDictation.isRecording else { return }
+        editorDictation.stop()
+    }
+
     private func createNewEntry() {
+        stopEditorDictation()
         let newEntry = HumanEntry.createNew()
         entries.insert(newEntry, at: 0) // Add to the beginning
         selectedEntryId = newEntry.id

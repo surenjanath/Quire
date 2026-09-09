@@ -74,7 +74,9 @@ freewrite/
 │   ├── VideoPlayerView.swift     # Video playback interface
 │   ├── OllamaService.swift       # Local Ollama HTTP client (model list, multi-turn chat, pull)
 │   ├── OllamaPanelView.swift     # Offline AI chat side panel (chat bubbles, follow-ups, personas)
-│   ├── VoiceDictationService.swift # Mic-only speech-to-text for dictating chat follow-ups
+│   ├── VoiceDictationService.swift # Mic-only speech-to-text for editor + chat follow-ups
+│   ├── WritingPreferences.swift  # Sanitize persisted font/size/timer values
+│   ├── EditorDictation.swift     # Combine editor snapshot + live speech transcript
 │   ├── SettingsView.swift        # Settings sheet: AI prompts + Ollama config (tabbed)
 │   ├── Prompts.swift             # Default AI prompts + Ollama persona presets
 │   ├── AppSettingsKeys.swift     # Shared UserDefaults keys/defaults
@@ -956,12 +958,40 @@ mid-session without opening Settings; `effectivePrompt` composes
 `(selectedPersona.promptOverride ?? basePrompt) + "\n\n" + sourceText`, and switching persona calls
 `restart()` (a persona change only makes sense as a fresh conversation, not applied retroactively).
 
-### Keyboard Shortcut: Cmd+Shift+O
+### Keyboard Shortcuts
 
-A hidden `Button` (`.hidden()`, attached via `.background(...)` on the root view) with
-`.keyboardShortcut("o", modifiers: [.command, .shift])` opens the Ollama panel directly for the
-current entry, skipping the Chat popover. It's gated by `canOfferOllamaChat()` — the same "guide
-text" / "write ≥350 chars first" checks the popover uses — so the shortcut can't bypass that gating.
+| Shortcut | Action |
+|---|---|
+| Cmd+N | New entry |
+| Cmd+, | Settings |
+| Ctrl+Cmd+F | Fullscreen |
+| Cmd+Shift+H | History sidebar |
+| Cmd+Shift+T | Start / pause timer |
+| Cmd+Shift+D | Light / dark theme |
+| Cmd+Shift+B | Backspace lock |
+| Cmd+Shift+M | Dictate into the current text entry |
+| Cmd+Shift+O | Open Ollama chat (gated by `canOfferOllamaChat()`) |
+
+Cmd+Shift+O and Cmd+Shift+T are hidden buttons on the root view. The others are attached to the
+matching bottom-nav controls. Cmd+Shift+O is still gated by the same "guide text" / "write ≥350
+chars first" checks the Chat popover uses.
+
+### Editor Dictation
+
+`VoiceDictationService` (already used for Ollama follow-ups) can also fill the main `TextEditor`.
+A mic button in the bottom nav (text entries only) snapshots `text` when recording starts, then
+applies `EditorDictation.combining(base:transcript:)` as partial results arrive so spoken words
+replace themselves without eating already-typed text. Dictation stops when the user creates a new
+entry, opens the video recorder, or switches to a video entry.
+
+### Writing Preference Persistence
+
+Font family, font size, backspace lock, and the *configured* timer length (`preferredTimerSeconds`)
+are stored in `UserDefaults` via `AppSettingsKeys`. The live countdown is still `@State` so a
+running timer does not write disk every second. On launch, `timeRemaining` is restored from
+`preferredTimerSeconds`. Double-clicking the timer still resets both to 15:00. Scroll-wheel
+adjustments update both the live timer and the persisted preferred length. Invalid stored values
+are sanitized by `WritingPreferences`.
 
 ### PDF Export Implementation
 
@@ -1093,9 +1123,10 @@ Generated at save time and stored in the per-entry video directory; sidebar load
 
 Stored in `UserDefaults`:
 - `colorScheme`: "light" or "dark"
+- `selectedFont`, `fontSize`, `backspaceDisabled`, `preferredTimerSeconds` (`AppSettingsKeys`)
 
-Other settings are session-only (not persisted):
-- Font size, font family, timer duration, backspace state
+Session-only:
+- Live `timeRemaining` countdown (restored from `preferredTimerSeconds` on launch)
 
 ## Future Development Notes
 

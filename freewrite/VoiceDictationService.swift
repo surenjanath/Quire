@@ -2,9 +2,9 @@
 //  VoiceDictationService.swift
 //  freewrite
 //
-//  Microphone-only speech-to-text (no camera involved) for dictating follow-up
-//  questions in the Ollama chat panel. Uses the same Speech framework as
-//  VideoRecordingView's live transcription, but captures audio directly via
+//  Microphone-only speech-to-text (no camera involved) for dictating into the
+//  main editor and into Ollama chat follow-ups. Uses the same Speech framework
+//  as VideoRecordingView's live transcription, but captures audio directly via
 //  AVAudioEngine instead of through an AVCaptureSession.
 //
 

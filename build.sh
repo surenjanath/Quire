@@ -40,6 +40,8 @@ cp "$ROOT/freewrite/freewriteApp.swift" \
    "$ROOT/freewrite/VideoRecordingView.swift" \
    "$ROOT/freewrite/Prompts.swift" \
    "$ROOT/freewrite/AppSettingsKeys.swift" \
+   "$ROOT/freewrite/WritingPreferences.swift" \
+   "$ROOT/freewrite/EditorDictation.swift" \
    "$ROOT/freewrite/OllamaService.swift" \
    "$ROOT/freewrite/OllamaPanelView.swift" \
    "$ROOT/freewrite/SettingsView.swift" \
@@ -61,7 +63,7 @@ swiftc -O \
     -target arm64-apple-macos14.0 \
     -parse-as-library \
     "$SRC_DIR/freewriteApp.swift" "$SRC_DIR/ContentView.swift" "$SRC_DIR/VideoPlayerView.swift" "$SRC_DIR/VideoRecordingView.swift" \
-    "$SRC_DIR/Prompts.swift" "$SRC_DIR/AppSettingsKeys.swift" "$SRC_DIR/OllamaService.swift" "$SRC_DIR/OllamaPanelView.swift" "$SRC_DIR/SettingsView.swift" "$SRC_DIR/VoiceDictationService.swift" \
+    "$SRC_DIR/Prompts.swift" "$SRC_DIR/AppSettingsKeys.swift" "$SRC_DIR/WritingPreferences.swift" "$SRC_DIR/EditorDictation.swift" "$SRC_DIR/OllamaService.swift" "$SRC_DIR/OllamaPanelView.swift" "$SRC_DIR/SettingsView.swift" "$SRC_DIR/VoiceDictationService.swift" \
     -o "$APP/Contents/MacOS/freewrite" \
     -framework SwiftUI -framework AppKit -framework AVFoundation -framework Speech -framework Combine -framework PDFKit
 
