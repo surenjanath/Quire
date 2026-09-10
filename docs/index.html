@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quire — a quiet, local-first writing room for macOS</title>
+<meta name="description" content="Quire is a distraction-free writing app for macOS: a blank page, a journal, voice and video, and optional offline AI, all on your disk. No account.">
+<link rel="icon" href="media/page.png">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fbfaf8;
+    --text: #262626;
+    --muted: #6b6b6b;
+    --line: #e4e1dc;
+    --card: #ffffff;
+    --accent: #262626;
+    --accent-text: #fbfaf8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161514;
+      --text: #eceae7;
+      --muted: #9a968f;
+      --line: #302e2b;
+      --card: #1e1c1a;
+      --accent: #eceae7;
+      --accent-text: #161514;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  .wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+  header.hero {
+    padding: 88px 0 56px;
+    text-align: center;
+  }
+  .hero h1 {
+    font-size: clamp(2rem, 5vw, 3rem);
+    margin: 0 0 14px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .hero p.tagline {
+    font-size: 1.15rem;
+    color: var(--muted);
+    max-width: 46ch;
+    margin: 0 auto 30px;
+  }
+  .actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .btn {
+    display: inline-block;
+    padding: 11px 22px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 0.95rem;
+    font-weight: 500;
+    border: 1px solid var(--line);
+  }
+  .btn.primary {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+  }
+  .hero-shot {
+    margin-top: 56px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    box-shadow: 0 30px 60px -30px rgba(0,0,0,0.35);
+  }
+  .hero-shot img { display: block; width: 100%; height: auto; }
+
+  section { padding: 56px 0; border-top: 1px solid var(--line); }
+  section h2 {
+    font-size: 1.5rem;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  section p.lede {
+    color: var(--muted);
+    margin: 0 0 32px;
+    max-width: 60ch;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 20px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .card h3 {
+    margin: 0 0 6px;
+    font-size: 1rem;
+  }
+  .card p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+
+  .shots {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .shots img, .shots video {
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    display: block;
+  }
+  .shots figure { margin: 0; }
+  .shots figcaption {
+    margin-top: 8px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+  }
+  .full { grid-column: 1 / -1; }
+
+  table.shortcuts {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  table.shortcuts td {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  table.shortcuts td:first-child {
+    width: 110px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  footer {
+    padding: 40px 0 80px;
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-align: center;
+  }
+  footer a { text-decoration: underline; }
+
+  @media (max-width: 560px) {
+    .shots { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <h1>Quire</h1>
+      <p class="tagline">A quiet, local-first writing room for macOS. One page. Your disk. No account.</p>
+      <div class="actions">
+        <a class="btn primary" href="https://github.com/surenjanath/Quire/releases/latest">Download for macOS</a>
+        <a class="btn" href="https://github.com/surenjanath/Quire">View on GitHub</a>
+      </div>
+      <div class="hero-shot">
+        <img src="media/page.png" alt="Quire writing page with History calendar open" loading="lazy">
+      </div>
+    </header>
+
+    <section>
+      <h2>Write without ceremony</h2>
+      <p class="lede">A timer if you want urgency. Backspace lock if you want momentum. Markdown files you can open in any editor. Everything lives on your Mac in <code>~/Documents/Freewrite/</code> (or a folder you choose).</p>
+      <div class="grid">
+        <div class="card">
+          <h3>The page</h3>
+          <p>Timed sessions, backspace lock, typewriter scroll, sentence focus, soft markdown, privacy blur, find on page.</p>
+        </div>
+        <div class="card">
+          <h3>The journal</h3>
+          <p>History with search, pins, streak, and a month calendar. Go (⌘K) to jump to any past page. Tags, on-this-day, weekly review, per-page Touch ID lock, earlier versions.</p>
+        </div>
+        <div class="card">
+          <h3>Video &amp; voice</h3>
+          <p>Video journaling and voice notes, both with live transcription, stored alongside your text entries.</p>
+        </div>
+        <div class="card">
+          <h3>Offline AI, if you want it</h3>
+          <p>Chat with a local Ollama model grounded in your journal — nothing leaves your Mac. Or watch Claude Code / Codex write in a side panel.</p>
+        </div>
+        <div class="card">
+          <h3>Nothing to lose</h3>
+          <p>Deleting an entry asks first, then goes to the macOS Trash — recoverable, not gone forever.</p>
+        </div>
+        <div class="card">
+          <h3>Plain files, your disk</h3>
+          <p>Entries are plain markdown. Export a single page as PDF, Markdown, or text — or the whole journal as a zip.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Look</h2>
+      <p class="lede">A short tour of the page, dark mode, Settings, and the History calendar.</p>
+      <div class="shots">
+        <figure class="full">
+          <video src="media/tour.mp4" width="900" controls muted playsinline></video>
+          <figcaption>12-second tour of the page, dark mode, Settings, and History</figcaption>
+        </figure>
+        <figure>
+          <img src="media/page.png" alt="Quire light mode writing page" loading="lazy">
+          <figcaption>Light</figcaption>
+        </figure>
+        <figure>
+          <img src="media/dark.png" alt="Quire dark mode writing page" loading="lazy">
+          <figcaption>Dark</figcaption>
+        </figure>
+        <figure>
+          <img src="media/settings.png" alt="Quire Settings panel showing Chat and Writing tabs" loading="lazy">
+          <figcaption>Settings — Chat and Writing</figcaption>
+        </figure>
+        <figure>
+          <img src="media/calendar.png" alt="Month calendar heatmap in Quire's History sidebar" loading="lazy">
+          <figcaption>History calendar</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>Shortcuts</h2>
+      <p class="lede">A few of the ones you'll use most. The full list is in the app and the README.</p>
+      <table class="shortcuts">
+        <tr><td>⌘N</td><td>New page</td></tr>
+        <tr><td>⌘K</td><td>Go — commands and journal search</td></tr>
+        <tr><td>⌘F / ⌘G</td><td>Find in this page / next match</td></tr>
+        <tr><td>⌃⌘F</td><td>Fullscreen</td></tr>
+        <tr><td>⌘⇧P</td><td>Privacy blur</td></tr>
+        <tr><td>⌘⇧H</td><td>History</td></tr>
+        <tr><td>⌘⇧O</td><td>Ollama chat</td></tr>
+        <tr><td>⌘⇧B</td><td>Backspace lock</td></tr>
+      </table>
+    </section>
+
+    <section>
+      <h2>Get it</h2>
+      <p class="lede">Download the latest release, or build it yourself — Command Line Tools are enough, Xcode isn't required.</p>
+      <div class="grid">
+        <div class="card">
+          <h3>Download</h3>
+          <p><a href="https://github.com/surenjanath/Quire/releases/latest">Latest release ↗</a> — unzip, drag Quire into Applications, then right-click → Open the first time (ad-hoc signed, not notarized).</p>
+        </div>
+        <div class="card">
+          <h3>Build from source</h3>
+          <p><code>git clone</code> the repo, then <code>./run-tests.sh &amp;&amp; ./build.sh</code> from the <code>freewrite/</code> folder.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <p>Fork of <a href="https://github.com/farzaa/freewrite">farzaa/freewrite</a> (MIT). Not the <a href="https://getfreewrite.com/">Freewrite hardware</a>.</p>
+      <p><a href="https://github.com/surenjanath/Quire">github.com/surenjanath/Quire</a></p>
+    </footer>
+  </div>
+</body>
+</html>
