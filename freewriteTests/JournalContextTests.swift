@@ -75,6 +75,20 @@ struct JournalContextTests {
         #expect(enriched.contains("mom called"))
         #expect(!enriched.contains("shipped the build"))
     }
+
+    @Test func packsAQuestionWithNoCurrentPage() {
+        let pages = [
+            JournalContext.Entry(filename: "mom.md", dateLabel: "May 4", body: "mom called and I did not pick up"),
+        ]
+        let packet = JournalContext.askPacket(question: "what did I say about mom?", pages: pages)
+        #expect(packet.contains("QUESTION"))
+        #expect(packet.contains("what did I say about mom?"))
+        #expect(packet.contains("JOURNAL PAGES"))
+        #expect(packet.contains("mom called"))
+        #expect(JournalContext.askHint(pageCount: 0) == "Nothing matched yet")
+        #expect(JournalContext.askHint(pageCount: 1) == "Grounded in 1 page")
+        #expect(JournalContext.askHint(pageCount: 3) == "Grounded in 3 pages")
+    }
 }
 
 struct OllamaSettingsTests {

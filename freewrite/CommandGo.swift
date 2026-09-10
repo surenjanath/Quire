@@ -11,6 +11,7 @@ enum CommandGo {
     enum Kind: Equatable {
         case command
         case page
+        case ask
     }
 
     struct Item: Identifiable, Equatable {
@@ -51,6 +52,16 @@ enum CommandGo {
 
     static func pageItem(id: String, title: String, hint: String) -> Item {
         Item(id: id, title: title, hint: hint, kind: .page)
+    }
+
+    /// The typed query itself, offered as "ask the offline model about my whole journal" — not
+    /// just the current page. `id` carries the raw question (trimmed); `title` is a display copy
+    /// capped so a long question doesn't blow out the palette row.
+    static func askItem(query: String) -> Item? {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 4 else { return nil }
+        let display = trimmed.count > 60 ? String(trimmed.prefix(59)) + "…" : trimmed
+        return Item(id: trimmed, title: "Ask: \u{201c}\(display)\u{201d}", hint: "Ask", kind: .ask)
     }
 }
 

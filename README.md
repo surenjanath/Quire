@@ -98,6 +98,7 @@ Everything lives on your Mac:
 **Chat and local agents**
 - Ollama beside the page — stays on this Mac
 - Grounded in this page plus related past entries
+- Ask a free-form question about your whole journal — ⌘K, type a question, pick "Ask: ..."
 - Continue / Tighten / Ask, then compare Now vs After, then Put on page
 - Highlight a passage first to talk about just that
 - Undo after putting a reply on the page

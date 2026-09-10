@@ -80,6 +80,21 @@ enum JournalContext {
         return parts.joined(separator: "\n\n")
     }
 
+    // For "Ask my journal" (Go palette): no current page to anchor on, just a question and
+    // whatever pages matched it.
+    static func askPacket(question: String, pages: [Entry]) -> String {
+        var parts = ["QUESTION", question.trimmingCharacters(in: .whitespacesAndNewlines)]
+        parts.append("JOURNAL PAGES")
+        for page in pages {
+            parts.append("\(page.dateLabel):\n\(page.body)")
+        }
+        return parts.joined(separator: "\n\n")
+    }
+
+    static func askHint(pageCount: Int) -> String {
+        pageCount == 0 ? "Nothing matched yet" : "Grounded in \(pageCount) page\(pageCount == 1 ? "" : "s")"
+    }
+
     static func hint(relatedCount: Int, focused: Bool = false) -> String {
         if focused {
             return relatedCount == 0

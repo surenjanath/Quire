@@ -2820,7 +2820,10 @@ struct ContentView: View {
                 hint: entry.date
             )
         }
-        return commands + pages
+        // Sits between commands and pages: a literal command match ("settings") still wins, but
+        // typing a real question always offers "ask the offline model" without hiding page hits.
+        let ask = [CommandGo.askItem(query: needle)].compactMap { $0 }
+        return commands + ask + pages
     }
 
     private func toggleGo() {
@@ -2843,6 +2846,10 @@ struct ContentView: View {
             if let entry = entries.first(where: { $0.filename == item.id }) {
                 selectEntry(entry)
             }
+            return
+        }
+        if item.kind == .ask {
+            askJournal(item.id)
             return
         }
         switch item.id {
@@ -3568,6 +3575,35 @@ struct ContentView: View {
             ollamaService.resetConversation()
         }
 
+        showingOllamaPanel = true
+        showingSidebar = false
+        showingGraph = false
+        showingAgentPanel = false
+        agentService.cancel()
+    }
+
+    // Unlike startOllamaChat (grounded in the current page) or startWeeklyReview (grounded in the
+    // last 7 days), this has no anchor page at all — the typed question is the query, searched
+    // against the whole journal. Opens nothing if nothing matches, rather than let the model guess.
+    private func askJournal(_ question: String) {
+        let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let catalog = journalCatalog()
+        let pages = JournalContext.related(to: trimmed, in: catalog, excluding: nil, limit: 6, excerptChars: 900)
+        guard !pages.isEmpty else {
+            showTransientMessage("Nothing in the journal matches that yet")
+            return
+        }
+
+        ollamaPromptOverride = PromptLibrary.defaultAskJournalPrompt
+        ollamaSourceText = JournalContext.askPacket(question: trimmed, pages: pages)
+        ollamaRelatedHint = JournalContext.askHint(pageCount: pages.count)
+        ollamaFocusPassage = ""
+        ollamaCatalog = catalog
+        ollamaCurrentFilename = nil
+        ollamaChatEntryId = nil
+        ollamaService.resetConversation()
+        ollamaPanelEpoch += 1
         showingOllamaPanel = true
         showingSidebar = false
         showingGraph = false

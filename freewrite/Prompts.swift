@@ -60,6 +60,14 @@ enum PromptLibrary {
 
     My week:
     """
+
+    static let defaultAskJournalPrompt = """
+    I'm asking a question about my own journal. Answer using only the pages below - if they don't say, tell me plainly instead of guessing or making something up. Point to a date when it helps. Keep it to a few honest paragraphs, not a list of every mention.
+
+    Start with "hey, thanks for showing me this. my thoughts:"
+
+    My question, and the pages it's grounded in:
+    """
 }
 
 /// Quick tone presets for the Ollama chat panel, swappable without opening Settings.

@@ -62,6 +62,14 @@ struct QuireTestRunner {
         expect(CommandGo.commands(matching: "claude").contains { $0.id == "claude-code" }, "go claude")
         expect(CommandGo.commands(matching: "zzzz").isEmpty, "go none")
         expect(CommandGo.commands(matching: "random").contains { $0.id == "random" }, "go random")
+        expect(CommandGo.askItem(query: "hi") == nil, "ask too short")
+        expect(CommandGo.askItem(query: "  ") == nil, "ask blank")
+        let ask = CommandGo.askItem(query: "what did I say about mom")
+        expect(ask?.kind == .ask, "ask kind")
+        expect(ask?.id == "what did I say about mom", "ask id is raw query")
+        expect(ask?.title.contains("what did I say about mom") == true, "ask title")
+        let longAsk = CommandGo.askItem(query: String(repeating: "a", count: 80))
+        expect((longAsk?.title.count ?? 0) < 80, "ask title truncates")
     }
 
     static func writingPrefs() {
@@ -175,6 +183,17 @@ struct QuireTestRunner {
         expect(JournalContext.hint(relatedCount: 0, focused: true) == "This selection", "focus hint")
         expect(JournalContext.focusPassage(selected: "  the river  ", in: "hello the river today") == "the river", "focus")
         expect(JournalContext.systemPrompt.lowercased().contains("only"), "grounded")
+        let askPages = [
+            JournalContext.Entry(filename: "mom.md", dateLabel: "May 4", body: "mom called and I did not pick up"),
+        ]
+        let askPacket = JournalContext.askPacket(question: "what did I say about mom?", pages: askPages)
+        expect(askPacket.contains("QUESTION"), "ask packet question label")
+        expect(askPacket.contains("what did I say about mom?"), "ask packet question text")
+        expect(askPacket.contains("JOURNAL PAGES"), "ask packet pages label")
+        expect(askPacket.contains("mom called"), "ask packet page body")
+        expect(JournalContext.askHint(pageCount: 0) == "Nothing matched yet", "ask hint none")
+        expect(JournalContext.askHint(pageCount: 1) == "Grounded in 1 page", "ask hint one")
+        expect(JournalContext.askHint(pageCount: 3) == "Grounded in 3 pages", "ask hint many")
         expect(OllamaSettings.parseThink("high") == .high, "think parse")
         expect(OllamaSettings.parseThink("nope") == .off, "think fallback")
         expect(OllamaSettings.clampTemperature(1.8) == 1, "temp high")
