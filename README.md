@@ -74,6 +74,7 @@ Everything lives on your Mac:
 - Go (⌘K) — run a command or jump to a past page by typing a word from it
 - Random page (from Go)
 - Earlier versions — Chat and agents snapshot the page before they change it. ⌘K → Earlier versions, or Journal → Earlier Versions. Keep the last 20.
+- Journal stats — lifetime entries, words written, longest entry, best streak ever, and your most-used tag. ⌘K → Journal Stats.
 - Per-page lock — lock icon in History. Touch ID to open that page. Files stay plain markdown.
 - On-this-day, weekly review, session recap
 - `#tags` — click a chip to find other entries

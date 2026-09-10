@@ -19,6 +19,7 @@ swiftc -sdk "$SDK" -target arm64-apple-macos14.0 -parse-as-library \
     "$SRC/WritingFocus.swift" \
     "$SRC/CommandGo.swift" \
     "$SRC/JournalContext.swift" \
+    "$SRC/JournalStats.swift" \
     "$SRC/OllamaSettings.swift" \
     "$SRC/QuireAction.swift" \
     "$SRC/LocalAgent.swift" \

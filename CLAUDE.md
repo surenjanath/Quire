@@ -86,6 +86,7 @@ freewrite/
 │   ├── JournalApply.swift        # Put an Ollama reply on the page without wiping images
 │   ├── JournalContinuity.swift   # Yesterday's last sentence on an empty page
 │   ├── JournalContext.swift      # Ground Ollama in related journal pages
+│   ├── JournalStats.swift        # Lifetime totals, longest entry, best streak, top tag
 │   ├── OllamaSettings.swift      # Thinking, temperature, context, system prompt
 │   ├── QuireAction.swift         # Menu/toolbar notifications + About copy
 │   ├── LocalAgent.swift          # Claude Code / Codex CLI jobs + streaming
@@ -1072,6 +1073,7 @@ are sanitized by `WritingPreferences`.
 - **Claude Code / Codex**: Chat menu opens a side panel (`AgentPanelView`). Reflect / Improve / Diagram / Ask stream into the panel. Copy / Undo / Insert / a "More" menu (Replace, Note) put the reply on the page — that row only appears once there's a reply or an undo available, not as disabled buttons up front. Follow-ups resend the journal plus your question. Paths live in Settings → Chat. The journal is sent on stdin. Mermaid turns on if a chart comes back. SVG fences are saved under Media.
 - **Go (⌘K)**: A small sheet for commands (Chat, Claude Code, New, Settings…) and a search of past pages. Journal → Go. Type a word from an old page to jump there. Random page is in the list.
 - **Page versions**: Chat Insert/Replace/Note and Claude Code / Codex snapshot the page first under `Versions/[entry-base]/`. Last 20. Restore from Go → Earlier versions, Journal menu, or ⋯. Restore snapshots the current page first. Images stay via `MarkdownExtras.restoringImageLines`.
+- **Journal stats**: Go → Journal Stats, or ⋯ → Journal Stats. Lifetime totals across every entry — count, words written, the longest entry, the best streak ever (not just the current one), and the most-used `#tag`. Computed once when the panel opens (`computeJournalStats`), not on every render — it reads every entry's file, same tradeoff as sidebar search. Skips the welcome guide and empty pages for totals/longest/tags; the streak count doesn't filter by content, matching the live streak badge in History.
 - **Compare then apply**: Insert / Replace / Note open Now vs After (`ApplyCompareView`). Put on page confirms. `PageCompare.swift`.
 - **Journal zip**: File → Export Journal. `JournalExport` copies `*.md`, `Media/`, `Versions/`. Skips Videos and Chats. `ditto -c -k`.
 - **Capture devices**: Settings → Writing camera / mic pickers. `CaptureDevices` + `CameraManager.setupCamera`. Voice notes still use the Mac input.

@@ -17,6 +17,7 @@ struct QuireTestRunner {
         dictationAndVoice()
         journalBits()
         journalContext()
+        journalStats()
         print("PASS")
     }
 
@@ -207,5 +208,40 @@ struct QuireTestRunner {
         expect(QuireAction.aboutShortcuts.contains { $0.key == "⌘K" }, "about go shortcut")
         expect(QuireAction.aboutSite.contains("surenjanath"), "about site")
         expect(Set([QuireAction.newPage, QuireAction.toggleHistory, QuireAction.toggleChat, QuireAction.exportPDF, QuireAction.exportJournal, QuireAction.go, QuireAction.toggleSentenceFocus, QuireAction.showVersions, QuireAction.openSettings, QuireAction.settingsClosed]).count == 10, "action names")
+    }
+
+    static func journalStats() {
+        expect(JournalStats.summarize([], streakDays: []) == .empty, "stats empty")
+
+        let day1 = Date(timeIntervalSince1970: 1_778_000_000)
+        let calendar = Calendar.current
+        let day2 = calendar.date(byAdding: .day, value: 1, to: day1)!
+        let day3 = calendar.date(byAdding: .day, value: 2, to: day1)!
+        let day5 = calendar.date(byAdding: .day, value: 4, to: day1)!
+
+        let facts = [
+            JournalStats.EntryFacts(words: 10, tags: ["river"]),
+            JournalStats.EntryFacts(words: 40, tags: ["river", "morning"]),
+            JournalStats.EntryFacts(words: 5, tags: []),
+        ]
+        let summary = JournalStats.summarize(facts, streakDays: [day1, day2, day3, day5])
+        expect(summary.totalEntries == 3, "stats total entries")
+        expect(summary.totalWords == 55, "stats total words")
+        expect(summary.longestEntryWords == 40, "stats longest entry")
+        expect(summary.bestStreak == 3, "stats best streak")
+        expect(summary.topTag == "river", "stats top tag")
+        expect(summary.topTagCount == 2, "stats top tag count")
+
+        expect(JournalStats.longestStreak(days: []) == 0, "streak empty")
+        expect(JournalStats.longestStreak(days: [day1]) == 1, "streak single day")
+        expect(JournalStats.longestStreak(days: [day1, day1, day2]) == 2, "streak dedups same day")
+        expect(JournalStats.longestStreak(days: [day1, day3]) == 1, "streak gap breaks run")
+
+        let tied = JournalStats.summarize([
+            JournalStats.EntryFacts(words: 1, tags: ["writing"]),
+            JournalStats.EntryFacts(words: 1, tags: ["morning"]),
+        ], streakDays: [])
+        expect(tied.topTag == "morning", "stats tag tie breaks alphabetically")
+        expect(tied.topTagCount == 1, "stats tag tie count")
     }
 }

@@ -33,6 +33,7 @@ enum CommandGo {
         ("privacy", "Hide the page", "⌘⇧P"),
         ("random", "Random page", ""),
         ("versions", "Earlier versions", ""),
+        ("stats", "Journal stats", ""),
         ("export", "Export PDF", "⌘⇧E"),
         ("export-journal", "Export journal", ""),
         ("settings", "Settings", "⌘,"),

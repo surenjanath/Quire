@@ -111,6 +111,8 @@ struct ContentView: View {
     @State private var showingGo = false
     @State private var goQuery = ""
     @State private var showingVersions = false
+    @State private var showingStats = false
+    @State private var journalStatsSummary: JournalStats.Summary = .empty
     @State private var findQuery = ""
     @State private var findIndex: Int?
     @State private var textNeedsSave = false
@@ -1810,6 +1812,7 @@ struct ContentView: View {
                                     Button("Screenshot") { captureScreenshot() }
                                     Button(privacyHidden ? "Show Page" : "Hide Page") { togglePrivacy() }
                                     Button("Earlier Versions") { showingVersions = true }
+                                    Button("Journal Stats") { presentStats() }
                                     Divider()
                                 }
                                 Button(isFullscreen ? "Exit Fullscreen" : "Fullscreen") { toggleFullscreen() }
@@ -2398,6 +2401,23 @@ struct ContentView: View {
             }
         }
         .overlay {
+            if showingStats {
+                ZStack {
+                    Color.black.opacity(0.12)
+                        .ignoresSafeArea()
+                        .onTapGesture { showingStats = false }
+                    VStack {
+                        StatsPanelView(
+                            summary: journalStatsSummary,
+                            onClose: { showingStats = false }
+                        )
+                        .padding(.top, 72)
+                        Spacer()
+                    }
+                }
+            }
+        }
+        .overlay {
             if showingGo {
                 ZStack {
                     Color.black.opacity(0.12)
@@ -2773,7 +2793,7 @@ struct ContentView: View {
             idleFor: Date().timeIntervalSince(lastActivityAt),
             timerRunning: timerIsRunning,
             hovering: isHoveringBottomNav,
-            forceVisible: showingSidebar || showingFind || showingGo || showingVersions || showingSettings || showingOllamaPanel || showingAgentPanel || showingVideoRecording || privacyHidden
+            forceVisible: showingSidebar || showingFind || showingGo || showingVersions || showingStats || showingSettings || showingOllamaPanel || showingAgentPanel || showingVideoRecording || privacyHidden
         )
         let target: Double = visible ? 1.0 : 0.0
         guard bottomNavOpacity != target else { return }
@@ -2849,6 +2869,8 @@ struct ContentView: View {
             openRandomPage()
         case "versions":
             showingVersions = true
+        case "stats":
+            presentStats()
         case "export":
             exportSelectedAsPDF()
         case "export-journal":
@@ -2867,6 +2889,40 @@ struct ContentView: View {
             return
         }
         selectEntry(entry)
+    }
+
+    private func presentStats() {
+        journalStatsSummary = computeJournalStats()
+        showingStats = true
+    }
+
+    // Reads every entry once, so this is only called when the Stats panel opens, not on every
+    // render — fine at personal-journal scale, same "just read the file" tradeoff as sidebar search.
+    private func computeJournalStats() -> JournalStats.Summary {
+        let documentsDirectory = getDocumentsDirectory()
+        var facts: [JournalStats.EntryFacts] = []
+        var streakDays: [Date] = []
+
+        for entry in entries {
+            guard let timestamp = parseCanonicalEntryFilename(entry.filename)?.timestamp else { continue }
+            streakDays.append(timestamp)
+
+            let content: String
+            if entry.entryType == .video {
+                content = resolvedVideoFilename(for: entry).flatMap(loadTranscriptText) ?? ""
+            } else {
+                let fileURL = documentsDirectory.appendingPathComponent(entry.filename)
+                content = (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
+            }
+
+            guard !JournalInsights.isGuideOrEmpty(content) else { continue }
+            facts.append(JournalStats.EntryFacts(
+                words: MarkdownExtras.wordCount(MarkdownExtras.visibleBody(content)),
+                tags: JournalTags.tags(in: content)
+            ))
+        }
+
+        return JournalStats.summarize(facts, streakDays: streakDays)
     }
 
     private func refreshEditorChrome() {
