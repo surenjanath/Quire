@@ -276,7 +276,7 @@ class CameraManager: NSObject, ObservableObject {
 
             videoOutput.startRecording(to: url, recordingDelegate: self)
 
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [self] in
                 self.isRecording = true
                 self.recordingTime = 0
                 self.recordingTimer?.invalidate()
@@ -365,7 +365,11 @@ class CameraManager: NSObject, ObservableObject {
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.requiresOnDeviceRecognition = false
-        speechRecognitionRequest = request
+        // Written here on the main thread, read in captureOutput(_:didOutput:from:) on speechQueue.
+        // Confine the write to speechQueue too so it's never touched from two queues at once.
+        speechQueue.async { [weak self] in
+            self?.speechRecognitionRequest = request
+        }
 
         speechRecognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self = self else { return }
@@ -385,8 +389,10 @@ class CameraManager: NSObject, ObservableObject {
     private func stopLiveCaptionRecognition(clearText: Bool) {
         captionPauseCommitWorkItem?.cancel()
         captionPauseCommitWorkItem = nil
-        speechRecognitionRequest?.endAudio()
-        speechRecognitionRequest = nil
+        speechQueue.async { [weak self] in
+            self?.speechRecognitionRequest?.endAudio()
+            self?.speechRecognitionRequest = nil
+        }
         speechRecognitionTask?.cancel()
         speechRecognitionTask = nil
         latestRecognitionText = ""

@@ -1181,6 +1181,21 @@ if session.isRunning {
 // Release session/output references without input/output removal churn.
 ```
 
+### Speech Recognition Request: One Queue Only
+
+`CameraManager.speechRecognitionRequest` (`SFSpeechAudioBufferRecognitionRequest`) is fed audio
+buffers from `captureOutput(_:didOutput:from:)`, which `AVCaptureAudioDataOutput` calls on
+`speechQueue` (the queue passed to `setSampleBufferDelegate(_:queue:)`). It's also the thing that
+gets created/torn down when live captions turn on/off (`startLiveCaptionRecognitionIfNeeded` /
+`stopLiveCaptionRecognition`), which happens from main-thread-driven paths (permission callbacks,
+`setCaptionsEnabled`, the recognition task's own result handler). Reading it on one queue while
+writing it on another with no synchronization is the same class of bug `captureSession` /
+`videoOutput` avoid by being touched only on `sessionQueue` — so `speechRecognitionRequest`'s
+writes are dispatched onto `speechQueue` too (`speechQueue.async { self?.speechRecognitionRequest
+= ... }`), matching where the delegate callback reads it. `speechRecognitionTask` and the caption
+text buffers don't need this — they're never touched from `speechQueue`, only from main-thread
+paths.
+
 ### File Path Issues
 
 Always use absolute paths:
