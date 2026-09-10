@@ -2,9 +2,9 @@
 
 A quiet, local-first writing room for macOS.
 
-Quire started as a fork of [farzaa/freewrite](https://github.com/farzaa/freewrite) and grew into something larger: a blank page for stream-of-consciousness writing, with a journal, voice, video, and optional offline AI sitting behind the glass. The page stays empty until you ask for more.
+A blank page for stream-of-consciousness writing, with a journal, voice, video, and optional offline AI sitting behind the glass. The page stays empty until you ask for more.
 
-This is not the [Freewrite hardware](https://getfreewrite.com/). It is not a cloud notes app.
+Not a hardware device. Not a cloud notes app.
 
 **One page. Your disk. No account.**
 
