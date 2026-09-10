@@ -58,7 +58,7 @@ struct OllamaPanelView: View {
 
             footer
         }
-        .frame(width: 340)
+        .frame(width: 280)
         .background(Color(colorScheme == .light ? .white : NSColor.black))
         .onAppear {
             Task { await refreshModels() }
@@ -68,15 +68,49 @@ struct OllamaPanelView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Ollama (Offline)")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.primary)
-                Text("Runs locally. Nothing leaves your machine.")
+                Text("Chat")
+                    .font(.system(size: 13))
+                    .foregroundColor(textHoverColor)
+                Text(selectedModel.isEmpty ? "Local · Ollama" : selectedModel)
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
             }
 
             Spacer()
+
+            Menu {
+                ForEach(service.availableModels, id: \.self) { model in
+                    Button(action: { selectedModel = model }) {
+                        if selectedModel == model {
+                            Label(model, systemImage: "checkmark")
+                        } else {
+                            Text(model)
+                        }
+                    }
+                }
+                Divider()
+                ForEach(OllamaPersona.allCases) { persona in
+                    Button(action: { selectedPersona = persona }) {
+                        if selectedPersona == persona {
+                            Label(persona.rawValue, systemImage: "checkmark")
+                        } else {
+                            Text(persona.rawValue)
+                        }
+                    }
+                }
+                Divider()
+                Button("Refresh models") {
+                    Task { await refreshModels() }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 11))
+                    .foregroundColor(textColor)
+            }
+            .menuStyle(.borderlessButton)
+            .frame(width: 18)
+            .help("Model and tone")
 
             if hasStarted {
                 Button(action: restart) {
@@ -102,8 +136,6 @@ struct OllamaPanelView: View {
     @ViewBuilder
     private func body(for service: OllamaService) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            controlsRow
-
             if service.availableModels.isEmpty && !service.isLoadingModels && service.errorMessage == nil {
                 emptyModelsState
             } else if let errorMessage = service.errorMessage {
@@ -111,9 +143,9 @@ struct OllamaPanelView: View {
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 12) {
+                        LazyVStack(alignment: .leading, spacing: 14) {
                             ForEach(service.messages) { message in
-                                bubble(for: message)
+                                transcriptLine(for: message)
                             }
                         }
                         .padding(.horizontal, 16)
@@ -142,27 +174,21 @@ struct OllamaPanelView: View {
         }
     }
 
-    private func bubble(for message: OllamaChatMessage) -> some View {
+    private func transcriptLine(for message: OllamaChatMessage) -> some View {
         let isUser = message.role == .user
         let isThinking = message.content.isEmpty && service.isStreaming && message.id == service.messages.last?.id
 
-        return HStack {
-            if isUser { Spacer(minLength: 32) }
-
-            markdownText(isThinking ? "Thinking..." : message.content)
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(isUser ? "You" : "Reply")
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+            markdownText(isThinking ? "…" : message.content)
                 .font(.system(size: 13))
-                .foregroundColor(isThinking ? .secondary : .primary)
+                .italic(isUser)
+                .foregroundColor(isThinking ? .secondary : (isUser ? textColor : .primary))
                 .textSelection(.enabled)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(isUser ? Color.accentColor.opacity(0.15) : Color.gray.opacity(0.08))
-                )
-
-            if !isUser { Spacer(minLength: 32) }
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
     }
 
     /// Renders basic Markdown (bold, italics, headings, lists, links) with a plain-text fallback.
@@ -292,17 +318,17 @@ struct OllamaPanelView: View {
                 .buttonStyle(.plain)
                 .help(dictation.isRecording ? "Stop dictation" : "Dictate follow-up")
 
-                TextField("Ask a follow-up...", text: $followUpText, axis: .vertical)
+                TextField("Continue…", text: $followUpText, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .lineLimit(1...4)
+                    .lineLimit(1...3)
                     .font(.system(size: 13))
                     .disabled(selectedModel.isEmpty)
                     .onSubmit { sendFollowUp() }
 
                 Button(action: sendFollowUp) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 20))
-                        .foregroundColor(followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || service.isStreaming ? textColor.opacity(0.4) : .accentColor)
+                    Text("Send")
+                        .font(.system(size: 12))
+                        .foregroundColor(followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || service.isStreaming ? textColor.opacity(0.4) : textHoverColor)
                 }
                 .buttonStyle(.plain)
                 .disabled(followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || service.isStreaming)

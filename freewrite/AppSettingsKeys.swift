@@ -18,6 +18,14 @@ enum AppSettingsKeys {
     static let fontSize = "fontSize"
     static let backspaceDisabled = "backspaceDisabled"
     static let preferredTimerSeconds = "preferredTimerSeconds"
+    static let typewriterMode = "typewriterMode"
+    static let advancedImages = "advancedImages"
+    static let advancedGraph = "advancedGraph"
+    static let advancedAnnotations = "advancedAnnotations"
+    static let advancedMermaid = "advancedMermaid"
+    static let dailyWordGoal = "dailyWordGoal"
+    static let journalFolderBookmark = "journalFolderBookmark"
+    static let journalLockEnabled = "journalLockEnabled"
 }
 
 enum AppSettingsDefaults {

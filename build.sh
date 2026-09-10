@@ -42,6 +42,20 @@ cp "$ROOT/freewrite/freewriteApp.swift" \
    "$ROOT/freewrite/AppSettingsKeys.swift" \
    "$ROOT/freewrite/WritingPreferences.swift" \
    "$ROOT/freewrite/EditorDictation.swift" \
+   "$ROOT/freewrite/JournalInsights.swift" \
+   "$ROOT/freewrite/WritingSpark.swift" \
+   "$ROOT/freewrite/VoiceNote.swift" \
+   "$ROOT/freewrite/JournalFolder.swift" \
+   "$ROOT/freewrite/JournalLock.swift" \
+   "$ROOT/freewrite/JournalChrome.swift" \
+   "$ROOT/freewrite/TypewriterScroll.swift" \
+   "$ROOT/freewrite/MarkdownExtras.swift" \
+   "$ROOT/freewrite/JournalTags.swift" \
+   "$ROOT/freewrite/MermaidFlow.swift" \
+   "$ROOT/freewrite/ImageAnnotator.swift" \
+   "$ROOT/freewrite/WritingGoal.swift" \
+   "$ROOT/freewrite/ImageStore.swift" \
+   "$ROOT/freewrite/AdvancedPanels.swift" \
    "$ROOT/freewrite/OllamaService.swift" \
    "$ROOT/freewrite/OllamaPanelView.swift" \
    "$ROOT/freewrite/SettingsView.swift" \
@@ -63,9 +77,9 @@ swiftc -O \
     -target arm64-apple-macos14.0 \
     -parse-as-library \
     "$SRC_DIR/freewriteApp.swift" "$SRC_DIR/ContentView.swift" "$SRC_DIR/VideoPlayerView.swift" "$SRC_DIR/VideoRecordingView.swift" \
-    "$SRC_DIR/Prompts.swift" "$SRC_DIR/AppSettingsKeys.swift" "$SRC_DIR/WritingPreferences.swift" "$SRC_DIR/EditorDictation.swift" "$SRC_DIR/OllamaService.swift" "$SRC_DIR/OllamaPanelView.swift" "$SRC_DIR/SettingsView.swift" "$SRC_DIR/VoiceDictationService.swift" \
+    "$SRC_DIR/Prompts.swift" "$SRC_DIR/AppSettingsKeys.swift" "$SRC_DIR/WritingPreferences.swift" "$SRC_DIR/EditorDictation.swift" "$SRC_DIR/JournalInsights.swift" "$SRC_DIR/WritingSpark.swift" "$SRC_DIR/VoiceNote.swift" "$SRC_DIR/JournalFolder.swift" "$SRC_DIR/JournalLock.swift" "$SRC_DIR/JournalChrome.swift" "$SRC_DIR/TypewriterScroll.swift" "$SRC_DIR/MarkdownExtras.swift" "$SRC_DIR/JournalTags.swift" "$SRC_DIR/MermaidFlow.swift" "$SRC_DIR/ImageAnnotator.swift" "$SRC_DIR/WritingGoal.swift" "$SRC_DIR/ImageStore.swift" "$SRC_DIR/AdvancedPanels.swift" "$SRC_DIR/OllamaService.swift" "$SRC_DIR/OllamaPanelView.swift" "$SRC_DIR/SettingsView.swift" "$SRC_DIR/VoiceDictationService.swift" \
     -o "$APP/Contents/MacOS/freewrite" \
-    -framework SwiftUI -framework AppKit -framework AVFoundation -framework Speech -framework Combine -framework PDFKit
+    -framework SwiftUI -framework AppKit -framework AVFoundation -framework Speech -framework Combine -framework PDFKit -framework LocalAuthentication
 
 echo "Assembling app bundle..."
 cp "$ROOT/freewrite/default.md" "$APP/Contents/Resources/"
@@ -81,9 +95,9 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
     <key>CFBundleIdentifier</key>
     <string>app.humansongs.freewrite</string>
     <key>CFBundleName</key>
-    <string>Freewrite</string>
+    <string>Quire</string>
     <key>CFBundleDisplayName</key>
-    <string>Freewrite</string>
+    <string>Quire</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -93,11 +107,11 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>NSCameraUsageDescription</key>
-    <string>Freewrite needs camera access to record video entries.</string>
+    <string>Quire needs camera access to record video entries.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Freewrite needs microphone access to record audio with your video entries and to dictate follow-up questions in AI chat.</string>
+    <string>Quire needs microphone access to record voice notes, video entries, and dictated text.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Freewrite uses speech recognition to transcribe video entries and to dictate follow-up questions in AI chat.</string>
+    <string>Quire uses speech recognition to transcribe voice notes, video entries, and dictated text.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>

@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -36,10 +37,15 @@ struct SettingsView: View {
                     .tabItem {
                         Label("Prompts", systemImage: "text.bubble")
                     }
+
+                AdvancedSettingsTab()
+                    .tabItem {
+                        Label("Advanced", systemImage: "slider.horizontal.3")
+                    }
             }
             .padding(20)
         }
-        .frame(width: 560, height: 520)
+        .frame(width: 560, height: 620)
     }
 }
 
@@ -200,6 +206,164 @@ private struct PromptsSettingsTab: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+private struct AdvancedSettingsTab: View {
+    @AppStorage(AppSettingsKeys.advancedImages) private var advancedImages = false
+    @AppStorage(AppSettingsKeys.advancedGraph) private var advancedGraph = false
+    @AppStorage(AppSettingsKeys.advancedAnnotations) private var advancedAnnotations = false
+    @AppStorage(AppSettingsKeys.advancedMermaid) private var advancedMermaid = false
+    @AppStorage(AppSettingsKeys.dailyWordGoal) private var dailyWordGoal = 0
+    @AppStorage(AppSettingsKeys.journalLockEnabled) private var journalLockEnabled = false
+    @State private var folderPath = JournalFolder.resolve(
+        bookmarkData: UserDefaults.standard.data(forKey: AppSettingsKeys.journalFolderBookmark)
+    ).path
+    @State private var folderError: String?
+
+    private var isUsingDefaultFolder: Bool {
+        UserDefaults.standard.data(forKey: AppSettingsKeys.journalFolderBookmark) == nil
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Off by default. The writing page stays a blank sheet until you turn something on.")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+
+                settingsCard(title: "Journal folder") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(folderPath)
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .textSelection(.enabled)
+                            .lineLimit(2)
+                        HStack(spacing: 12) {
+                            Button("Choose Folder…") { chooseFolder() }
+                            Button("Use Default") { resetFolder() }
+                                .disabled(isUsingDefaultFolder)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.accentColor)
+                        .font(.system(size: 12, weight: .medium))
+                        if let folderError {
+                            Text(folderError)
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+
+                settingsCard(title: "Lock") {
+                    toggleRow(
+                        title: "Require Touch ID to open",
+                        subtitle: "Asks for Touch ID or your Mac password when Freewrite launches. Entries stay as plain markdown on disk.",
+                        isOn: Binding(
+                            get: { journalLockEnabled },
+                            set: { newValue in
+                                Task { await setLockEnabled(newValue) }
+                            }
+                        )
+                    )
+                }
+
+                settingsCard(title: "Writing") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Daily word goal")
+                            .font(.system(size: 13))
+                        Text("Shown in History. 0 hides the meter.")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                        TextField("0", value: $dailyWordGoal, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 120)
+                    }
+                }
+
+                settingsCard(title: "Media") {
+                    toggleRow(
+                        title: "Images and screenshots",
+                        subtitle: "Paste a picture or capture the screen, then click a thumbnail to draw on it. Saved as markdown: ![ ](Media/…)",
+                        isOn: $advancedImages
+                    )
+                }
+
+                settingsCard(title: "Graph") {
+                    toggleRow(
+                        title: "Entry graph",
+                        subtitle: "Link notes with [[like this]], then open a map of those connections from History.",
+                        isOn: $advancedGraph
+                    )
+                }
+
+                settingsCard(title: "Notes") {
+                    toggleRow(
+                        title: "Annotations",
+                        subtitle: "Lines starting with >> become margin notes. Wrap a phrase in ==equals== to highlight it.",
+                        isOn: $advancedAnnotations
+                    )
+                    toggleRow(
+                        title: "Mermaid diagrams",
+                        subtitle: "Fence a chart with ```mermaid. graph TD / flowchart lines like A[Start] --> B render under the page.",
+                        isOn: $advancedMermaid
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Use Folder"
+        panel.message = "Entries, videos, and chats will be saved here."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try JournalFolder.ensureLayout(at: url)
+            let data = try JournalFolder.bookmark(for: url)
+            UserDefaults.standard.set(data, forKey: AppSettingsKeys.journalFolderBookmark)
+            JournalFolder.beginAccess(to: url)
+            folderPath = url.path
+            folderError = nil
+        } catch {
+            folderError = "Could not use that folder."
+        }
+    }
+
+    private func resetFolder() {
+        UserDefaults.standard.removeObject(forKey: AppSettingsKeys.journalFolderBookmark)
+        let root = JournalFolder.defaultRoot()
+        try? JournalFolder.ensureLayout(at: root)
+        folderPath = root.path
+        folderError = nil
+    }
+
+    private func setLockEnabled(_ enabled: Bool) async {
+        if enabled {
+            let ok = await JournalLock.authenticate(reason: "Turn on the Freewrite lock")
+            journalLockEnabled = ok
+        } else {
+            journalLockEnabled = false
+        }
+    }
+
+    private func toggleRow(title: String, subtitle: String, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 13))
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .toggleStyle(.switch)
     }
 }
 

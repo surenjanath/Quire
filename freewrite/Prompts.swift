@@ -44,6 +44,14 @@ enum PromptLibrary {
 
     My entry:
     """
+
+    static let defaultWeeklyReviewPrompt = """
+    You are a thoughtful friend reading my journal from the last week. Don't recap every day. Find the patterns, the tension, and the one thing I keep circling. Talk to me like a close friend who actually read all of it. Keep it to a few honest paragraphs.
+
+    Start with "hey, thanks for showing me this. my thoughts:"
+
+    My week:
+    """
 }
 
 /// Quick tone presets for the Ollama chat panel, swappable without opening Settings.

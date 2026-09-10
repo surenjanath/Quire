@@ -1,4 +1,4 @@
-# Freewrite - Technical Documentation for AI Agents
+# Quire (Freewrite fork) — Technical Documentation for AI Agents
 
 > **⚠️ IMPORTANT FOR AI AGENTS**: This file (`AGENTS.md`) and `CLAUDE.md` are clones and must be kept in sync.
 >
@@ -11,6 +11,8 @@
 ## Product Vision & User Experience
 
 ### What is Freewrite?
+
+The shipped Dock name is **Quire**. Internally and on disk this is still the Freewrite tree (`app.humansongs.freewrite`, `~/Documents/Freewrite/`).
 
 Freewrite is a **distraction-free writing environment** for macOS designed around the concept of stream-of-consciousness writing and video journaling. The core philosophy is to remove barriers between thought and writing by creating a minimalist, opinionated interface that prioritizes the act of writing over formatting, organization, or editing.
 
@@ -77,6 +79,17 @@ freewrite/
 │   ├── VoiceDictationService.swift # Mic-only speech-to-text for editor + chat follow-ups
 │   ├── WritingPreferences.swift  # Sanitize persisted font/size/timer values
 │   ├── EditorDictation.swift     # Combine editor snapshot + live speech transcript
+│   ├── JournalInsights.swift     # On-this-day, weekly window, session recap, month heatmap
+│   ├── WritingSpark.swift        # Daily empty-page prompt (stable for the whole day)
+│   ├── VoiceNote.swift           # Voice-note markdown, m4a storage, recorder
+│   ├── JournalTags.swift         # #tag extraction
+│   ├── MermaidFlow.swift         # Offline mermaid flowchart parse + strip
+│   ├── ImageAnnotator.swift      # Draw-on-screenshot canvas
+│   ├── WritingGoal.swift         # Optional daily word-goal meter
+│   ├── JournalFolder.swift       # Default or user-picked journal root (security-scoped bookmark)
+│   ├── JournalLock.swift         # Optional Touch ID / password launch gate
+│   ├── JournalChrome.swift       # History month grid + voice-note play strip
+│   ├── TypewriterScroll.swift    # Center the caret in the editor while typing
 │   ├── SettingsView.swift        # Settings sheet: AI prompts + Ollama config (tabbed)
 │   ├── Prompts.swift             # Default AI prompts + Ollama persona presets
 │   ├── AppSettingsKeys.swift     # Shared UserDefaults keys/defaults
@@ -355,8 +368,8 @@ Privacy usage descriptions (in Xcode project build settings):
 
 ```
 INFOPLIST_KEY_NSCameraUsageDescription = "Freewrite needs camera access to record video entries."
-INFOPLIST_KEY_NSMicrophoneUsageDescription = "Freewrite needs microphone access to record audio with your video entries and to dictate follow-up questions in AI chat."
-INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Freewrite uses speech recognition to transcribe video entries and to dictate follow-up questions in AI chat."
+INFOPLIST_KEY_NSMicrophoneUsageDescription = "Freewrite needs microphone access to record voice notes, video entries, and dictated text."
+INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Freewrite uses speech recognition to transcribe voice notes, video entries, and dictated text."
 ```
 
 ## Technical Nuances & Implementation Details
@@ -970,7 +983,10 @@ mid-session without opening Settings; `effectivePrompt` composes
 | Cmd+Shift+D | Light / dark theme |
 | Cmd+Shift+B | Backspace lock |
 | Cmd+Shift+M | Dictate into the current text entry |
+| Cmd+Shift+A | Record a voice note (audio file + live transcript) |
 | Cmd+Shift+O | Open Ollama chat (gated by `canOfferOllamaChat()`) |
+| Cmd+Shift+R | Weekly Ollama review of the last 7 days |
+| Cmd+Shift+Y | Toggle typewriter scroll |
 
 Cmd+Shift+O and Cmd+Shift+T are hidden buttons on the root view. The others are attached to the
 matching bottom-nav controls. Cmd+Shift+O is still gated by the same "guide text" / "write ≥350
@@ -992,6 +1008,22 @@ running timer does not write disk every second. On launch, `timeRemaining` is re
 `preferredTimerSeconds`. Double-clicking the timer still resets both to 15:00. Scroll-wheel
 adjustments update both the live timer and the persisted preferred length. Invalid stored values
 are sanitized by `WritingPreferences`.
+
+### On This Day, Weekly Review, Session Recap, Typewriter
+
+- **On this day**: History sidebar shows a banner when an older entry shares today's month/day. Clicking it opens that entry. Date math lives in `JournalInsights.swift` and reads wall-clock parts from the canonical filename so time zones cannot shift the day.
+- **Weekly Review**: Chat menu and History both offer "Weekly Review" (shortcut Cmd+Shift+R). It compiles the last 7 days of text + video transcripts, skips the welcome guide / empty files, and opens Ollama with `PromptLibrary.defaultWeeklyReviewPrompt`. It does not overwrite that day's per-entry chat history (`ollamaChatEntryId` is nil).
+- **Session recap**: When the timer reaches 0, a short overlay shows words written this session and the configured duration, then fades.
+- **Typewriter**: Font menu toggle (persisted via `AppSettingsKeys.typewriterMode`). While on, `TypewriterScroll` insets the `NSTextView` and keeps the caret vertically centered.
+- **Daily spark**: Empty-page placeholder comes from `WritingSpark.prompt(for:)` and stays the same all day.
+- **History calendar**: Month heatmap in the History sidebar. Days with entries are outlined; click jumps to that day's latest note.
+- **Voice notes**: Waveform button (⌘⇧A) records an `.m4a` under `Media/[entry-base]/` and prepends `[voice note](…)` while live dictation fills the page. A play strip appears when an entry has voice clips.
+- **Journal folder**: Settings → Advanced can point at any folder via a security-scoped bookmark (`journalFolderBookmark`). Videos and Chats stay under that root. Reset returns to `~/Documents/Freewrite` (or the sandbox container equivalent). Changing folder reloads History.
+- **Touch ID lock**: Settings → Advanced toggle. Off by default. When on, launch shows a lock overlay and prompts for Touch ID or the Mac password before loading entries. This is a gate only — files on disk stay plain markdown.
+- **Tags**: `#river` chips appear under the page. Clicking one searches History for that tag. Headings (`# Title`) are ignored.
+- **Mermaid**: Settings → Advanced. Fence a chart as a mermaid code block (`graph TD` / `A[Start] --> B`). A quiet strip under the page lists the edges.
+- **Draw on screenshots**: With images on, click a thumbnail to ink on it. Save burns the strokes into the PNG.
+- **Daily word goal**: Settings → Advanced. 0 hides it. Otherwise History shows today's words toward the goal.
 
 ### PDF Export Implementation
 
@@ -1123,7 +1155,8 @@ Generated at save time and stored in the per-entry video directory; sidebar load
 
 Stored in `UserDefaults`:
 - `colorScheme`: "light" or "dark"
-- `selectedFont`, `fontSize`, `backspaceDisabled`, `preferredTimerSeconds` (`AppSettingsKeys`)
+- `selectedFont`, `fontSize`, `backspaceDisabled`, `preferredTimerSeconds`, `typewriterMode` (`AppSettingsKeys`)
+- Advanced (off by default): `advancedImages`, `advancedGraph`, `advancedAnnotations`
 
 Session-only:
 - Live `timeRemaining` countdown (restored from `preferredTimerSeconds` on launch)
