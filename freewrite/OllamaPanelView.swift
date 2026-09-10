@@ -57,6 +57,13 @@ struct OllamaPanelView: View {
         service.messages.last(where: { $0.role == .assistant })?.content
     }
 
+    // The streamed assistant turn exists (non-nil) from the moment a reply starts, before any
+    // tokens arrive — so this, not `lastAssistantMessage == nil`, is what "is there something to
+    // act on yet" actually means.
+    private var hasReplyContent: Bool {
+        !(lastAssistantMessage ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var effectivePrompt: String {
         (selectedPersona.promptOverride ?? basePrompt) + "\n\n" + sourceText
     }
@@ -380,16 +387,6 @@ struct OllamaPanelView: View {
                     .disabled(selectedModel.isEmpty)
                     .onSubmit { sendFollowUp() }
 
-                Button(action: sendFollowUp) {
-                    Text("Send")
-                        .font(.system(size: 12))
-                        .foregroundColor(followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || service.isStreaming ? textColor.opacity(0.4) : textHoverColor)
-                }
-                .buttonStyle(.plain)
-                .disabled(followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || service.isStreaming)
-            }
-
-            HStack {
                 Menu {
                     Button("Continue") {
                         sendCanned(focusPassage.isEmpty
@@ -407,16 +404,23 @@ struct OllamaPanelView: View {
                             : "Ask me one sharp question about the highlighted passage. Nothing else.")
                     }
                 } label: {
-                    Text("Quick prompt")
-                        .font(.system(size: 11))
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 13))
+                        .foregroundColor(textColor)
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
                 .disabled(service.isStreaming || selectedModel.isEmpty)
+                .help("Quick prompt: Continue, Tighten, or Ask")
 
-                Spacer(minLength: 0)
+                Button(action: sendFollowUp) {
+                    Text("Send")
+                        .font(.system(size: 12))
+                        .foregroundColor(followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || service.isStreaming ? textColor.opacity(0.4) : textHoverColor)
+                }
+                .buttonStyle(.plain)
+                .disabled(followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || service.isStreaming)
             }
-            .foregroundColor(textColor)
 
             if let pending = pendingApply {
                 ApplyCompareView(
@@ -444,50 +448,53 @@ struct OllamaPanelView: View {
                 .foregroundColor(textColor)
             }
 
-            HStack(spacing: 8) {
-                if service.isStreaming {
-                    Button("Stop") { service.cancel() }
-                        .buttonStyle(.plain)
-                        .foregroundColor(textColor)
-                }
-
-                Spacer()
-
-                Button(action: copyLastResponse) {
-                    Text(didCopy ? "Copied!" : "Copy")
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(textColor)
-                .disabled(lastAssistantMessage == nil)
-
-                if canUndo {
-                    Button("Undo") { onUndo() }
-                        .buttonStyle(.plain)
-                        .foregroundColor(textColor)
-                        .help("Put the page back the way it was")
-                }
-
-                if canInsert {
-                    Button("Insert") { apply(.append) }
-                        .buttonStyle(.plain)
-                        .foregroundColor(textColor)
-                        .disabled(lastAssistantMessage == nil)
-                        .help("Append the reply to this page")
-
-                    Menu {
-                        Button("Replace") { apply(.replace) }
-                            .help("Replace the page text. Pasted images stay.")
-                        Button("Note") { apply(.note) }
-                            .help("Add the first sentence as a >> note")
-                    } label: {
-                        Text("More")
+            // Nothing to act on yet (no reply, nothing streaming, nothing to undo) — don't show
+            // a row of disabled buttons for it.
+            if service.isStreaming || canUndo || hasReplyContent {
+                HStack(spacing: 8) {
+                    if service.isStreaming {
+                        Button("Stop") { service.cancel() }
+                            .buttonStyle(.plain)
+                            .foregroundColor(textColor)
                     }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                    .disabled(lastAssistantMessage == nil)
+
+                    Spacer()
+
+                    if hasReplyContent {
+                        Button(action: copyLastResponse) {
+                            Text(didCopy ? "Copied!" : "Copy")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(textColor)
+                    }
+
+                    if canUndo {
+                        Button("Undo") { onUndo() }
+                            .buttonStyle(.plain)
+                            .foregroundColor(textColor)
+                            .help("Put the page back the way it was")
+                    }
+
+                    if canInsert && hasReplyContent {
+                        Button("Insert") { apply(.append) }
+                            .buttonStyle(.plain)
+                            .foregroundColor(textColor)
+                            .help("Append the reply to this page")
+
+                        Menu {
+                            Button("Replace") { apply(.replace) }
+                                .help("Replace the page text. Pasted images stay.")
+                            Button("Note") { apply(.note) }
+                                .help("Add the first sentence as a >> note")
+                        } label: {
+                            Text("More")
+                        }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                    }
                 }
+                .font(.system(size: 12))
             }
-            .font(.system(size: 12))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)

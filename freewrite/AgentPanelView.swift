@@ -169,43 +169,46 @@ struct AgentPanelView: View {
                 )
             }
 
-            HStack(spacing: 8) {
-                Button(action: copyReply) {
-                    Text(didCopy ? "Copied!" : "Copy")
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(textColor)
-                .disabled(reply.isEmpty)
-
-                if canUndo {
-                    Button("Undo") { onUndo() }
+            // Nothing to act on yet (no reply, nothing to undo) — don't show a row of disabled
+            // buttons for it. (Stop lives in the header, not here.)
+            if canUndo || !reply.isEmpty {
+                HStack(spacing: 8) {
+                    if !reply.isEmpty {
+                        Button(action: copyReply) {
+                            Text(didCopy ? "Copied!" : "Copy")
+                        }
                         .buttonStyle(.plain)
                         .foregroundColor(textColor)
-                }
-
-                Spacer()
-
-                if canInsert {
-                    Button("Insert") { pendingApply = (.append, service.reply) }
-                        .buttonStyle(.plain)
-                        .foregroundColor(textColor)
-                        .disabled(reply.isEmpty)
-                        .help("Append the reply to this page")
-
-                    Menu {
-                        Button("Replace") { pendingApply = (.replace, service.reply) }
-                            .help("Replace the page text. Pasted images stay.")
-                        Button("Note") { pendingApply = (.note, service.reply) }
-                            .help("Add the first sentence as a >> note")
-                    } label: {
-                        Text("More")
                     }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                    .disabled(reply.isEmpty)
+
+                    if canUndo {
+                        Button("Undo") { onUndo() }
+                            .buttonStyle(.plain)
+                            .foregroundColor(textColor)
+                    }
+
+                    Spacer()
+
+                    if canInsert && !reply.isEmpty {
+                        Button("Insert") { pendingApply = (.append, service.reply) }
+                            .buttonStyle(.plain)
+                            .foregroundColor(textColor)
+                            .help("Append the reply to this page")
+
+                        Menu {
+                            Button("Replace") { pendingApply = (.replace, service.reply) }
+                                .help("Replace the page text. Pasted images stay.")
+                            Button("Note") { pendingApply = (.note, service.reply) }
+                                .help("Add the first sentence as a >> note")
+                        } label: {
+                            Text("More")
+                        }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                    }
                 }
+                .font(.system(size: 12))
             }
-            .font(.system(size: 12))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)

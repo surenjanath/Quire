@@ -876,12 +876,20 @@ the History sidebar, gated on `showingOllamaPanel`. Mutually exclusive with the 
   showing raw `**`/`#` characters.
 - Header has a model picker (persisted via `AppSettingsKeys.ollamaModel`), refresh button, and (once
   a conversation has started) a "New Chat" button that calls `resetConversation()` + restarts.
-- Footer has an "Ask a follow-up..." `TextField` (multi-line, `axis: .vertical`) + send button
-  wired to `sendFollowUp`, plus Stop (while streaming)/Copy/Insert/Replace/Note acting on the **last assistant
-  message** (`lastAssistantMessage`), not the whole transcript. Insert appends, Replace rewrites the
-  visible page (image markdown stays), Note adds the first sentence as `>> …`. Undo puts the page
-  back. Suggested `#tags` from repeated words on the page sit above those buttons. Highlight text
-  before opening Chat to ground Continue / Tighten / Ask in that passage.
+- Footer has an "Ask a follow-up..." `TextField` (multi-line, `axis: .vertical`) in one compose
+  row with the mic (dictate), a `wand.and.stars` menu (Continue / Tighten / Ask — the quick-start
+  canned prompts, folded into an icon menu instead of their own row of text buttons), and Send.
+  Below that, a second row — Stop (while streaming) / Copy / Undo / Insert / a "More" menu
+  (Replace, Note) — acts on the **last assistant message** (`lastAssistantMessage`), not the whole
+  transcript. That row only renders at all when there's something for it to do
+  (`service.isStreaming || canUndo || hasReplyContent`), and Copy/Insert/More only render once
+  `hasReplyContent` is true, so the panel doesn't show a row of disabled buttons before the first
+  reply exists. `hasReplyContent` checks trimmed non-emptiness, not `lastAssistantMessage != nil` —
+  the assistant slot is non-nil (an empty placeholder) from the moment a reply starts streaming,
+  before any tokens arrive. Insert appends, Replace rewrites the visible page (image markdown
+  stays), Note adds the first sentence as `>> …`. Undo puts the page back. Suggested `#tags` from
+  repeated words on the page sit above those buttons. Highlight text before opening Chat to ground
+  Continue / Tighten / Ask in that passage.
 - Switching the model picker mid-conversation calls `restart()` (reset + start fresh) rather than
   continuing the old transcript with a different model.
 
@@ -1056,7 +1064,7 @@ are sanitized by `WritingPreferences`.
 - **Bottom bar**: Words, timer, Chat, New, and icons stay in the row. Dictate, voice, images, and privacy live under the ⋯ menu. Image markdown and leftover screenshot paths are hidden from the page.
 - **Tests**: `./run-tests.sh` compiles the logic files without Xcode and must print `PASS`. Word count and find use the visible page (no image markdown). A line like `Start → Write` becomes a mermaid strip when Advanced diagrams are on.
 - **Grounded Ollama**: Chat packs the current page plus related past entries. The system prompt tells the model to use only that text, skip the stock greeting, and keep reasoning in thinking. Follow-ups re-search the journal. Continue / Tighten / Ask sit under the composer. Highlight a passage first to talk about just that. Insert / Replace / Note put the reply on the page (stock greeting stripped; images stay). Undo restores the page. Repeated words become suggested `#tags`. Settings can set thinking, temperature, and context.
-- **Claude Code / Codex**: Chat menu opens a side panel (`AgentPanelView`). Reflect / Improve / Diagram / Ask stream into the panel. Insert / Replace / Note / Undo put the reply on the page. Follow-ups resend the journal plus your question. Paths live in Settings → Chat. The journal is sent on stdin. Mermaid turns on if a chart comes back. SVG fences are saved under Media.
+- **Claude Code / Codex**: Chat menu opens a side panel (`AgentPanelView`). Reflect / Improve / Diagram / Ask stream into the panel. Copy / Undo / Insert / a "More" menu (Replace, Note) put the reply on the page — that row only appears once there's a reply or an undo available, not as disabled buttons up front. Follow-ups resend the journal plus your question. Paths live in Settings → Chat. The journal is sent on stdin. Mermaid turns on if a chart comes back. SVG fences are saved under Media.
 - **Go (⌘K)**: A small sheet for commands (Chat, Claude Code, New, Settings…) and a search of past pages. Journal → Go. Type a word from an old page to jump there. Random page is in the list.
 - **Page versions**: Chat Insert/Replace/Note and Claude Code / Codex snapshot the page first under `Versions/[entry-base]/`. Last 20. Restore from Go → Earlier versions, Journal menu, or ⋯. Restore snapshots the current page first. Images stay via `MarkdownExtras.restoringImageLines`.
 - **Compare then apply**: Insert / Replace / Note open Now vs After (`ApplyCompareView`). Put on page confirms. `PageCompare.swift`.
