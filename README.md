@@ -4,8 +4,6 @@ A quiet, local-first writing room for macOS.
 
 A blank page for stream-of-consciousness writing, with a journal, voice, video, and optional offline AI sitting behind the glass. The page stays empty until you ask for more.
 
-Not a hardware device. Not a cloud notes app.
-
 **One page. Your disk. No account.**
 
 ## Look
