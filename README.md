@@ -8,6 +8,34 @@ This is not the [Freewrite hardware](https://getfreewrite.com/). It is not a clo
 
 **One page. Your disk. No account.**
 
+## Look
+
+A 12-second tour of the page, dark mode, Settings, the History calendar, and the bottom bar:
+
+<video src="docs/media/tour.mp4" width="900" controls muted></video>
+
+<p align="center">
+  <img src="docs/media/page.png" alt="Quire writing page with History calendar" width="900">
+</p>
+
+| Light | Dark |
+|---|---|
+| <img src="docs/media/page.png" alt="Light writing page"> | <img src="docs/media/dark.png" alt="Dark writing page"> |
+
+<p align="center">
+  <img src="docs/media/settings.png" alt="Settings with journal folder, lock, and Advanced toggles" width="720">
+</p>
+
+The month heatmap and the writing bar, captured from the running app:
+
+<p align="center">
+  <img src="docs/media/calendar.png" alt="September calendar with today marked" width="360">
+</p>
+
+<p align="center">
+  <img src="docs/media/toolbar.png" alt="Font, timer, chat, dictation, and history controls" width="900">
+</p>
+
 ## The idea
 
 Write without ceremony. A timer if you want urgency. Backspace lock if you want momentum. Markdown files you can open in any editor.
