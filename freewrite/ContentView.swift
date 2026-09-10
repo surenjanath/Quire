@@ -190,6 +190,7 @@ struct ContentView: View {
     @State private var editorDictationBase: String = ""
     @State private var isHoveringDictate = false
     @State private var isHoveringVoiceNote = false
+    @State private var recordingPulse = false
     @State private var sidebarSearchQuery: String = ""
     @State private var calendarMonth = Date()
     @State private var pinnedEntryIDs: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "pinnedEntryIDs") ?? [])
@@ -1256,6 +1257,24 @@ struct ContentView: View {
                         
                         // Utility buttons (moved to right)
                         HStack(spacing: 8) {
+                            if !isViewingVideoEntry, let recordingIndicatorLabel {
+                                HStack(spacing: 5) {
+                                    Circle()
+                                        .fill(Color.red)
+                                        .frame(width: 6, height: 6)
+                                        .opacity(recordingPulse ? 1.0 : 0.35)
+                                        .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: recordingPulse)
+                                        .onAppear { recordingPulse = true }
+                                        .onDisappear { recordingPulse = false }
+                                    Text(recordingIndicatorLabel)
+                                        .foregroundColor(.red)
+                                }
+                                .help("\(recordingIndicatorLabel)… click Stop in the ⋯ menu, or press ⌘⇧M / ⌘⇧A")
+
+                                Text("•")
+                                    .foregroundColor(.gray)
+                            }
+
                             if !isViewingVideoEntry {
                                 Text("\(currentWordCount) words")
                                     .foregroundColor(textColor)
@@ -2596,6 +2615,15 @@ struct ContentView: View {
 
     private var currentWordCount: Int {
         MarkdownExtras.wordCount(text)
+    }
+
+    // Dictate and Voice Note both live only in the ⋯ menu, which closes the moment you pick one —
+    // without this, starting either leaves no sign anywhere that a mic is live. Voice Note also
+    // turns dictation on underneath it (see toggleVoiceNote), so it takes label priority.
+    private var recordingIndicatorLabel: String? {
+        if voiceNoteRecorder.isRecording { return "Recording voice note" }
+        if editorDictation.isRecording { return "Dictating" }
+        return nil
     }
 
     private var writingStreak: Int {

@@ -1030,10 +1030,15 @@ chars first" checks the Chat popover uses.
 ### Editor Dictation
 
 `VoiceDictationService` (already used for Ollama follow-ups) can also fill the main `TextEditor`.
-A mic button in the bottom nav (text entries only) snapshots `text` when recording starts, then
+"Dictate" in the ⋯ menu (text entries only, ⌘⇧M) snapshots `text` when recording starts, then
 applies `EditorDictation.combining(base:transcript:)` as partial results arrive so spoken words
 replace themselves without eating already-typed text. Dictation stops when the user creates a new
-entry, opens the video recorder, or switches to a video entry.
+entry, opens the video recorder, or switches to a video entry. Since the ⋯ menu closes as soon as
+you pick an item, the menu label toggling to "Stop Dictation" isn't visible once recording starts —
+a pulsing red dot + "Dictating" (or "Recording voice note", which takes priority since Voice Note
+also turns dictation on underneath it) shows in the bottom-right utility row for as long as either
+is active (`recordingIndicatorLabel`). Any future ⋯-menu toggle that keeps running after the menu
+closes should get the same kind of persistent indicator, not just a menu-label change no one sees.
 
 ### Writing Preference Persistence
 
@@ -1052,7 +1057,7 @@ are sanitized by `WritingPreferences`.
 - **Typewriter**: Font menu toggle (persisted via `AppSettingsKeys.typewriterMode`). While on, `TypewriterScroll` insets the `NSTextView` and keeps the caret vertically centered.
 - **Daily spark**: Empty-page placeholder comes from `WritingSpark.prompt(for:)` and stays the same all day.
 - **History calendar**: Month heatmap in the History sidebar. Days with entries are outlined; click jumps to that day's latest note.
-- **Voice notes**: Waveform button (⌘⇧A) records an `.m4a` under `Media/[entry-base]/` and prepends `[voice note](…)` while live dictation fills the page. A play strip appears when an entry has voice clips.
+- **Voice notes**: "Voice Note" in the ⋯ menu (⌘⇧A) records an `.m4a` under `Media/[entry-base]/` and prepends `[voice note](…)` while live dictation fills the page. A play strip appears when an entry has voice clips. A pulsing red dot + label in the bottom-right utility row shows while it (or plain dictation) is recording — see Editor Dictation above.
 - **Journal folder**: Settings → Writing can point at any folder via a security-scoped bookmark (`journalFolderBookmark`). Videos and Chats stay under that root. Reset returns to `~/Documents/Freewrite` (or the sandbox container equivalent). Changing folder reloads History.
 - **Touch ID lock**: Settings → Writing toggle. Off by default. When on, launch shows a lock overlay and prompts for Touch ID or the Mac password before loading entries. This is a gate only — files on disk stay plain markdown.
 - **Tags**: `#river` chips appear under the page. Clicking one searches History for that tag. Headings (`# Title`) are ignored.
