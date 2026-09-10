@@ -36,6 +36,7 @@ enum CommandGo {
         ("stats", "Journal stats", ""),
         ("export", "Export PDF", "⌘⇧E"),
         ("export-journal", "Export journal", ""),
+        ("import", "Import entry", ""),
         ("settings", "Settings", "⌘,"),
     ]
 

@@ -1809,6 +1809,7 @@ struct ContentView: View {
                                         toggleVoiceNote()
                                     }
                                     Button("Paste Image") { insertClipboardImage() }
+                                    Button("Import Entry\u{2026}") { importEntry() }
                                     Button("Screenshot") { captureScreenshot() }
                                     Button(privacyHidden ? "Show Page" : "Hide Page") { togglePrivacy() }
                                     Button("Earlier Versions") { showingVersions = true }
@@ -2875,6 +2876,8 @@ struct ContentView: View {
             exportSelectedAsPDF()
         case "export-journal":
             exportJournalZip()
+        case "import":
+            importEntry()
         case "settings":
             QuireAction.post(QuireAction.openSettings)
         default:
@@ -3186,7 +3189,47 @@ struct ContentView: View {
             saveEntry(entry: newEntry)
         }
     }
-    
+
+    // The mirror of exportEntryAsPlainFile: writing comes in as a new page, dated now (not
+    // whatever date the source file claims — this isn't a migration tool, just a quick way to
+    // bring one piece of writing in without leaving the app).
+    private func importEntry() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.plainText, UTType(filenameExtension: "md") ?? .plainText]
+        panel.prompt = "Import"
+        panel.message = "Pick a text or markdown file to bring in as a new page."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        guard let raw = try? String(contentsOf: url, encoding: .utf8) else {
+            showTransientMessage("Could not read that file")
+            return
+        }
+        let content = JournalImport.sanitize(raw)
+        guard !content.isEmpty else {
+            showTransientMessage("That file was empty")
+            return
+        }
+
+        finishVoiceNoteIfRecording()
+        flushSaveIfNeeded()
+        let newEntry = HumanEntry.createNew()
+        entries.insert(newEntry, at: 0)
+        selectedEntryId = newEntry.id
+        applyBefore = nil
+        currentVideoURL = nil
+        selectedVideoHasTranscript = false
+        didCopyTranscript = false
+        text = content
+        saveEntry(entry: newEntry)
+        updatePreviewText(for: newEntry)
+        historyDebug("IMPORT ENTRY created \(debugEntrySummary(newEntry)) from \(url.lastPathComponent)")
+        logEntriesOrder("importEntry")
+        showTransientMessage("Imported \u{201c}\(url.lastPathComponent)\u{201d}")
+    }
+
     private func openChatGPT() {
         let fullText = effectiveChatGPTPrompt + "\n\n" + currentChatSourceText()
         if let url = ChatURL.chatGPT(fullText) {

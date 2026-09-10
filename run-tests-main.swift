@@ -18,6 +18,7 @@ struct QuireTestRunner {
         journalBits()
         journalContext()
         journalStats()
+        journalImport()
         print("PASS")
     }
 
@@ -243,5 +244,13 @@ struct QuireTestRunner {
         ], streakDays: [])
         expect(tied.topTag == "morning", "stats tag tie breaks alphabetically")
         expect(tied.topTagCount == 1, "stats tag tie count")
+    }
+
+    static func journalImport() {
+        expect(JournalImport.sanitize("hello\r\nworld\r\n") == "hello\nworld", "import CRLF")
+        expect(JournalImport.sanitize("hello\rworld") == "hello\nworld", "import CR")
+        expect(JournalImport.sanitize("\u{FEFF}hello") == "hello", "import BOM")
+        expect(JournalImport.sanitize("  hello  \n\n") == "hello", "import trim")
+        expect(JournalImport.sanitize("") == "", "import empty")
     }
 }

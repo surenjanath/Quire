@@ -82,6 +82,7 @@ Everything lives on your Mac:
 - Custom journal folder
 - Optional Touch ID / password lock at launch (a gate, not encryption)
 - PDF, Markdown, and plain-text export
+- Import a text or markdown file as a new page — the way in, to match the way out
 - Export the whole journal as a zip (markdown, Media, Versions — not Videos or Chats)
 - Video journal — pick camera and microphone in Settings → Writing
 - Voice notes (audio + live transcript)

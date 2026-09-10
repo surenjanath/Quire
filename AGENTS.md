@@ -103,6 +103,7 @@ freewrite/
 │   ├── PageVersions.swift        # Snapshots before Chat / agent apply
 │   ├── PageCompare.swift         # Now vs After before Insert / Replace
 │   ├── JournalExport.swift       # Zip markdown + Media + Versions
+│   ├── JournalImport.swift       # Bring a text/markdown file in as a new page
 │   ├── CaptureDevices.swift      # Camera / mic pick
 │   ├── PageLock.swift            # Per-page Touch ID gate
 │   ├── QuietSounds.swift         # Typewriter ticks + room tone
@@ -1076,6 +1077,7 @@ are sanitized by `WritingPreferences`.
 - **Journal stats**: Go → Journal Stats, or ⋯ → Journal Stats. Lifetime totals across every entry — count, words written, the longest entry, the best streak ever (not just the current one), and the most-used `#tag`. Computed once when the panel opens (`computeJournalStats`), not on every render — it reads every entry's file, same tradeoff as sidebar search. Skips the welcome guide and empty pages for totals/longest/tags; the streak count doesn't filter by content, matching the live streak badge in History.
 - **Compare then apply**: Insert / Replace / Note open Now vs After (`ApplyCompareView`). Put on page confirms. `PageCompare.swift`.
 - **Journal zip**: File → Export Journal. `JournalExport` copies `*.md`, `Media/`, `Versions/`. Skips Videos and Chats. `ditto -c -k`.
+- **Import an entry**: Go → Import Entry, or ⋯ → Import Entry…. `NSOpenPanel` restricted to plain text and `.md`; `JournalImport.sanitize` strips a BOM, normalizes CRLF/CR to LF, and trims. Lands as a brand-new page dated now (not the source file's date — this is a quick way in, not a migration tool), through the same path as `createNewEntry()`.
 - **Capture devices**: Settings → Writing camera / mic pickers. `CaptureDevices` + `CameraManager.setupCamera`. Voice notes still use the Mac input.
 - **Per-page lock**: History lock icon. `PageLock` stores UUIDs. Touch ID to open or unlock. Disk stays markdown.
 - **Quiet sounds**: Typewriter `Tink` and generated room tone. Off by default.
