@@ -54,6 +54,8 @@ cp "$ROOT/freewrite/freewriteApp.swift" \
    "$ROOT/freewrite/MermaidFlow.swift" \
    "$ROOT/freewrite/ImageAnnotator.swift" \
    "$ROOT/freewrite/WritingGoal.swift" \
+   "$ROOT/freewrite/QuietTools.swift" \
+   "$ROOT/freewrite/WritingFocus.swift" \
    "$ROOT/freewrite/ImageStore.swift" \
    "$ROOT/freewrite/AdvancedPanels.swift" \
    "$ROOT/freewrite/OllamaService.swift" \
@@ -77,7 +79,7 @@ swiftc -O \
     -target arm64-apple-macos14.0 \
     -parse-as-library \
     "$SRC_DIR/freewriteApp.swift" "$SRC_DIR/ContentView.swift" "$SRC_DIR/VideoPlayerView.swift" "$SRC_DIR/VideoRecordingView.swift" \
-    "$SRC_DIR/Prompts.swift" "$SRC_DIR/AppSettingsKeys.swift" "$SRC_DIR/WritingPreferences.swift" "$SRC_DIR/EditorDictation.swift" "$SRC_DIR/JournalInsights.swift" "$SRC_DIR/WritingSpark.swift" "$SRC_DIR/VoiceNote.swift" "$SRC_DIR/JournalFolder.swift" "$SRC_DIR/JournalLock.swift" "$SRC_DIR/JournalChrome.swift" "$SRC_DIR/TypewriterScroll.swift" "$SRC_DIR/MarkdownExtras.swift" "$SRC_DIR/JournalTags.swift" "$SRC_DIR/MermaidFlow.swift" "$SRC_DIR/ImageAnnotator.swift" "$SRC_DIR/WritingGoal.swift" "$SRC_DIR/ImageStore.swift" "$SRC_DIR/AdvancedPanels.swift" "$SRC_DIR/OllamaService.swift" "$SRC_DIR/OllamaPanelView.swift" "$SRC_DIR/SettingsView.swift" "$SRC_DIR/VoiceDictationService.swift" \
+    "$SRC_DIR/Prompts.swift" "$SRC_DIR/AppSettingsKeys.swift" "$SRC_DIR/WritingPreferences.swift" "$SRC_DIR/EditorDictation.swift" "$SRC_DIR/JournalInsights.swift" "$SRC_DIR/WritingSpark.swift" "$SRC_DIR/VoiceNote.swift" "$SRC_DIR/JournalFolder.swift" "$SRC_DIR/JournalLock.swift" "$SRC_DIR/JournalChrome.swift" "$SRC_DIR/TypewriterScroll.swift" "$SRC_DIR/MarkdownExtras.swift" "$SRC_DIR/JournalTags.swift" "$SRC_DIR/MermaidFlow.swift" "$SRC_DIR/ImageAnnotator.swift" "$SRC_DIR/WritingGoal.swift" "$SRC_DIR/QuietTools.swift" "$SRC_DIR/WritingFocus.swift" "$SRC_DIR/ImageStore.swift" "$SRC_DIR/AdvancedPanels.swift" "$SRC_DIR/OllamaService.swift" "$SRC_DIR/OllamaPanelView.swift" "$SRC_DIR/SettingsView.swift" "$SRC_DIR/VoiceDictationService.swift" \
     -o "$APP/Contents/MacOS/freewrite" \
     -framework SwiftUI -framework AppKit -framework AVFoundation -framework Speech -framework Combine -framework PDFKit -framework LocalAuthentication
 

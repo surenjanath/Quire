@@ -63,10 +63,12 @@ Everything lives on your Mac:
 - PDF export
 - `#tags` — click a chip to find other entries
 - Optional daily word goal
+- Favorite fonts (star a face from the font menu)
 - Optional Touch ID / password lock at launch (a gate, not encryption)
 - Custom journal folder
 
 **Settings → Advanced (off by default)**
+- Idle fade — hide the bottom bar after eight seconds without typing
 - Paste / capture images; click a thumbnail to draw on it
 - `[[wiki links]]` and an entry graph
 - `>>` margin notes and `==highlights==`
@@ -85,8 +87,11 @@ The first entry you ever see is still Farza’s original freewriting guide. Afte
 | Shortcut | Action |
 |---|---|
 | Cmd+N | New entry |
+| Cmd+F | Find in page |
+| Cmd+G | Next match |
 | Cmd+, | Settings |
 | Ctrl+Cmd+F | Fullscreen |
+| Cmd+Shift+P | Privacy blur |
 | Cmd+Shift+H | History |
 | Cmd+Shift+T | Timer |
 | Cmd+Shift+D | Light / dark |

@@ -61,7 +61,7 @@ enum MermaidFlow {
     }
 
     private static func parseEdgeLine(_ line: String) -> (from: (id: String, label: String?), to: (id: String, label: String?))? {
-        let arrows = ["-->", "---", "-.->", "==>"]
+        let arrows = ["-.->", "==>", "-->", "---", "→", "->"]
         guard let arrow = arrows.first(where: { line.contains($0) }) else { return nil }
         let parts = line.components(separatedBy: arrow)
         guard parts.count >= 2 else { return nil }

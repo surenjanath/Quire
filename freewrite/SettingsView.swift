@@ -215,6 +215,8 @@ private struct AdvancedSettingsTab: View {
     @AppStorage(AppSettingsKeys.advancedAnnotations) private var advancedAnnotations = false
     @AppStorage(AppSettingsKeys.advancedMermaid) private var advancedMermaid = false
     @AppStorage(AppSettingsKeys.dailyWordGoal) private var dailyWordGoal = 0
+    @AppStorage(AppSettingsKeys.followSystemAppearance) private var followSystemAppearance = false
+    @AppStorage(AppSettingsKeys.idleFadeEnabled) private var idleFadeEnabled = false
     @AppStorage(AppSettingsKeys.journalLockEnabled) private var journalLockEnabled = false
     @State private var folderPath = JournalFolder.resolve(
         bookmarkData: UserDefaults.standard.data(forKey: AppSettingsKeys.journalFolderBookmark)
@@ -269,7 +271,17 @@ private struct AdvancedSettingsTab: View {
                 }
 
                 settingsCard(title: "Writing") {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        toggleRow(
+                            title: "Match the Mac",
+                            subtitle: "Follow system light and dark. The moon button still lets you pick one.",
+                            isOn: $followSystemAppearance
+                        )
+                        toggleRow(
+                            title: "Idle fade",
+                            subtitle: "Hide the bottom bar after eight seconds without typing. Hover the bottom edge to bring it back.",
+                            isOn: $idleFadeEnabled
+                        )
                         Text("Daily word goal")
                             .font(.system(size: 13))
                         Text("Shown in History. 0 hides the meter.")

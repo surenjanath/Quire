@@ -26,6 +26,9 @@ enum AppSettingsKeys {
     static let dailyWordGoal = "dailyWordGoal"
     static let journalFolderBookmark = "journalFolderBookmark"
     static let journalLockEnabled = "journalLockEnabled"
+    static let followSystemAppearance = "followSystemAppearance"
+    static let idleFadeEnabled = "idleFadeEnabled"
+    static let favoriteFonts = "favoriteFonts"
 }
 
 enum AppSettingsDefaults {

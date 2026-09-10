@@ -49,16 +49,101 @@ enum MarkdownExtras {
         }
     }
 
+    static func isImageMarkdownLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix("![") else { return false }
+        return imageRefs(in: trimmed).count == 1 && trimmed.hasSuffix(")")
+    }
+
+    static func isHiddenImageLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        return isImageMarkdownLine(trimmed) || ImageStore.isImageFilePath(trimmed)
+    }
+
+    static func hidingImageLines(_ text: String) -> String {
+        text
+            .components(separatedBy: "\n")
+            .filter { !isHiddenImageLine($0) }
+            .joined(separator: "\n")
+    }
+
+    static func restoringImageLines(visible: String, stored: String) -> String {
+        let imageLines = stored
+            .components(separatedBy: "\n")
+            .filter { isImageMarkdownLine($0) }
+        var seen = Set<String>()
+        let unique = imageLines.filter { seen.insert($0).inserted }
+        var body = hidingImageLines(visible)
+        guard !unique.isEmpty else { return body }
+        while body.hasSuffix("\n\n") {
+            body.removeLast()
+        }
+        if !body.isEmpty && !body.hasSuffix("\n") {
+            body += "\n"
+        }
+        return body + "\n" + unique.joined(separator: "\n") + "\n"
+    }
+
     static func insertImage(into text: String, relativePath: String, alt: String) -> String {
         let line = "![\(alt)](\(relativePath))"
-        var stem = text
-        if !stem.hasPrefix("\n\n") {
-            stem = "\n\n" + stem.trimmingCharacters(in: .newlines)
+        if text.contains(line) { return text }
+        var body = text
+        if body.isEmpty { return line + "\n" }
+        if !body.hasSuffix("\n") { body += "\n" }
+        return body + line + "\n"
+    }
+
+    static func scrubbingPage(_ text: String) -> String {
+        var out: [String] = []
+        var blankRun = 0
+        for line in text.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if ImageStore.isImageFilePath(trimmed) {
+                continue
+            }
+            if trimmed.isEmpty {
+                blankRun += 1
+                if blankRun == 1 { out.append("") }
+                continue
+            }
+            blankRun = 0
+            out.append(line)
         }
-        if stem.hasSuffix("\n") {
-            return stem + "\n" + line + "\n"
+        while out.first == "" { out.removeFirst() }
+        while out.last == "" { out.removeLast() }
+        return out.joined(separator: "\n")
+    }
+
+    static func visibleBody(_ text: String) -> String {
+        scrubbingPage(hidingImageLines(text))
+    }
+
+    static func wordCount(_ text: String) -> Int {
+        visibleBody(text)
+            .split { $0.isWhitespace || $0.isNewline }
+            .filter { token in token.contains { $0.isLetter || $0.isNumber } }
+            .count
+    }
+
+    static func isLooseFlowLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("```") else { return false }
+        let arrows = ["-.->", "==>", "-->", "---", "→", "->"]
+        guard arrows.contains(where: { trimmed.contains($0) }) else { return false }
+        if trimmed.contains(where: { $0 == "." || $0 == "?" || $0 == "!" }) { return false }
+        let words = trimmed.split { $0.isWhitespace }.count
+        return (2...8).contains(words)
+    }
+
+    static func mermaidSources(in text: String) -> [String] {
+        var sources = mermaidBlocks(in: text)
+        for line in hidingImageLines(text).components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard isLooseFlowLine(trimmed) else { continue }
+            if sources.contains(where: { $0.contains(trimmed) }) { continue }
+            sources.append(trimmed)
         }
-        return stem + "\n\n" + line + "\n"
+        return sources
     }
 
     static func annotations(in text: String) -> [String] {

@@ -98,6 +98,17 @@ struct ContentView: View {
     @AppStorage(AppSettingsKeys.dailyWordGoal) private var dailyWordGoal = 0
     @State private var annotatingImagePath: String?
     @State private var imageStripEpoch = 0
+    @State private var privacyHidden = false
+    @State private var showingFind = false
+    @State private var findQuery = ""
+    @State private var findIndex: Int?
+    @State private var textNeedsSave = false
+    @State private var pendingDelete: HumanEntry?
+    @AppStorage(AppSettingsKeys.followSystemAppearance) private var followSystemAppearance = false
+    @AppStorage(AppSettingsKeys.idleFadeEnabled) private var idleFadeEnabled = false
+    @AppStorage(AppSettingsKeys.favoriteFonts) private var favoriteFonts = ""
+    @State private var lastActivityAt = Date()
+    @Environment(\.colorScheme) private var systemColorScheme
     @State private var timeRemaining: Int = AppSettingsDefaults.timerSeconds
     @State private var timerIsRunning = false
     @State private var isHoveringTimer = false
@@ -724,15 +735,16 @@ struct ContentView: View {
         return currentRandomFont.isEmpty ? "Random" : "Random [\(currentRandomFont)]"
     }
 
+    private var pageText: Binding<String> {
+        Binding(
+            get: { MarkdownExtras.hidingImageLines(text) },
+            set: { text = MarkdownExtras.restoringImageLines(visible: $0, stored: text) }
+        )
+    }
+
     var currentFontDisplayName: String {
         if !currentRandomFont.isEmpty { return currentRandomFont }
-        switch selectedFont {
-        case "Lato-Regular": return "Lato"
-        case "Arial": return "Arial"
-        case ".AppleSystemUIFont": return "System"
-        case "Times New Roman": return "Serif"
-        default: return selectedFont
-        }
+        return FavoriteFonts.displayName(for: selectedFont)
     }
 
     private func startVideoRecordingPreflight() {
@@ -963,8 +975,16 @@ struct ContentView: View {
                 } else {
                     // Show text editor for text entries
                     VStack(spacing: 0) {
+                    if !currentImageRefs.isEmpty {
+                        ImageStrip(
+                            paths: currentImageRefs,
+                            documentsDirectory: documentsDirectory,
+                            onEdit: { annotatingImagePath = $0 }
+                        )
+                        .id(imageStripEpoch)
+                    }
                     HStack(alignment: .top, spacing: 0) {
-                    TextEditor(text: $text)
+                    TextEditor(text: pageText)
                     .background(Color(colorScheme == .light ? .white : .black))
                     .font(.custom(selectedFont, size: fontSize))
                     .foregroundColor(colorScheme == .light ? Color(red: 0.20, green: 0.20, blue: 0.20) : Color(red: 0.9, green: 0.9, blue: 0.9))
@@ -973,8 +993,7 @@ struct ContentView: View {
                     .lineSpacing(lineHeight)
                     .frame(maxWidth: 650)
                     .padding(.top, 40)
-                    .id("\(selectedFont)-\(fontSize)-\(colorScheme)")
-                    .padding(.bottom, bottomNavOpacity > 0 ? navHeight : 0)
+                    .id("\(selectedFont)-\(fontSize)")
                     .colorScheme(colorScheme)
                     .onAppear {
                         placeholderText = WritingSpark.prompt(for: Date())
@@ -983,16 +1002,20 @@ struct ContentView: View {
                         // Add keyboard monitor for backspace/delete keys
                         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                             // Check if backspace is disabled and the key is delete/backspace
-                            if backspaceDisabled && (event.keyCode == 51 || event.keyCode == 117) {
-                                // Block the backspace/delete key
+                            if CompositionGuard.shouldBlockBackspace(
+                                lockEnabled: backspaceDisabled,
+                                keyCode: event.keyCode,
+                                hasMarkedText: CompositionGuard.firstTextViewHasMarkedText()
+                            ) {
                                 return nil
                             }
-                            if advancedImages,
-                               currentVideoURL == nil,
+                            if currentVideoURL == nil,
                                event.modifierFlags.contains(.command),
                                event.keyCode == 9,
-                               !ImageStore.clipboardHasPlainText(),
-                               ImageStore.imageFromClipboard() != nil {
+                               ImageStore.shouldPreferClipboardImage(
+                                hasImage: ImageStore.imageFromClipboard() != nil,
+                                plainText: ImageStore.clipboardPlainText()
+                               ) {
                                 insertClipboardImage()
                                 return nil
                             }
@@ -1039,18 +1062,11 @@ struct ContentView: View {
                     if !currentVoiceRefs.isEmpty {
                         VoiceStrip(paths: currentVoiceRefs, documentsDirectory: documentsDirectory)
                     }
-                    if advancedImages, !currentImageRefs.isEmpty {
-                        ImageStrip(
-                            paths: currentImageRefs,
-                            documentsDirectory: documentsDirectory,
-                            onEdit: { annotatingImagePath = $0 }
-                        )
-                        .id(imageStripEpoch)
-                    }
                     if advancedMermaid, !currentMermaidCharts.isEmpty {
                         MermaidStrip(charts: currentMermaidCharts)
                     }
                     }
+                    .padding(.bottom, bottomNavOpacity > 0 ? navHeight : 0)
                 }
                     
                 
@@ -1116,6 +1132,16 @@ struct ContentView: View {
                                     .foregroundColor(.gray)
 
                                 Menu {
+                                    let favorites = FavoriteFonts.parse(favoriteFonts)
+                                    if !favorites.isEmpty {
+                                        ForEach(favorites, id: \.self) { font in
+                                            Button("★ \(FavoriteFonts.displayName(for: font))") {
+                                                selectedFont = font
+                                                currentRandomFont = ""
+                                            }
+                                        }
+                                        Divider()
+                                    }
                                     Button("Lato") {
                                         selectedFont = "Lato-Regular"
                                         currentRandomFont = ""
@@ -1139,6 +1165,11 @@ struct ContentView: View {
                                         }
                                     }
                                     Divider()
+                                    Button(favorites.contains(selectedFont) ? "Remove from favorites" : "Add to favorites") {
+                                        favoriteFonts = FavoriteFonts.serialize(
+                                            FavoriteFonts.toggling(selectedFont, in: favorites)
+                                        )
+                                    }
                                     Button(action: { typewriterMode.toggle() }) {
                                         if typewriterMode {
                                             Label("Typewriter", systemImage: "checkmark")
@@ -1335,8 +1366,8 @@ struct ContentView: View {
                                     // Calculate potential URL lengths
                                     let gptFullText = effectiveChatGPTPrompt + "\n\n" + chatSourceText
                                     let claudeFullText = effectiveClaudePrompt + "\n\n" + chatSourceText
-                                    let encodedGptText = gptFullText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                                    let encodedClaudeText = claudeFullText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                                    let encodedGptText = ChatURL.encodeQuery(gptFullText)
+                                    let encodedClaudeText = ChatURL.encodeQuery(claudeFullText)
                                     
                                     let gptUrlLength = "https://chat.openai.com/?m=".count + encodedGptText.count
                                     let claudeUrlLength = "https://claude.ai/new?q=".count + encodedClaudeText.count
@@ -1581,16 +1612,15 @@ struct ContentView: View {
                                 .foregroundColor(.gray)
 
                             if !isViewingVideoEntry {
-                                // Backspace toggle button
                                 Button(action: {
                                     backspaceDisabled.toggle()
                                 }) {
-                                    Text(backspaceDisabled ? "Backspace is Off" : "Backspace is On")
+                                    Image(systemName: backspaceDisabled ? "delete.backward.fill" : "delete.backward")
                                         .foregroundColor(isHoveringBackspaceToggle ? textHoverColor : textColor)
                                 }
                                 .buttonStyle(.plain)
                                 .keyboardShortcut("b", modifiers: [.command, .shift])
-                                .help("Toggle backspace lock. ⌘⇧B")
+                                .help(backspaceDisabled ? "Backspace locked. ⌘⇧B" : "Lock backspace. ⌘⇧B")
                                 .onHover { hovering in
                                     isHoveringBackspaceToggle = hovering
                                     isHoveringBottomNav = hovering
@@ -1601,81 +1631,37 @@ struct ContentView: View {
                                     }
                                 }
 
-                                Text("•")
-                                    .foregroundColor(.gray)
-
-                                Button(action: toggleEditorDictation) {
-                                    Image(systemName: editorDictation.isRecording ? "mic.fill" : "mic")
-                                        .foregroundColor(
-                                            editorDictation.isRecording
-                                                ? .red
-                                                : (isHoveringDictate ? textHoverColor : textColor)
-                                        )
+                                Menu {
+                                    Button(editorDictation.isRecording ? "Stop Dictation" : "Dictate") {
+                                        toggleEditorDictation()
+                                    }
+                                    Button(voiceNoteRecorder.isRecording ? "Stop Voice Note" : "Voice Note") {
+                                        toggleVoiceNote()
+                                    }
+                                    Button("Paste Image") { insertClipboardImage() }
+                                    Button("Screenshot") { captureScreenshot() }
+                                    Button(privacyHidden ? "Show Page" : "Hide Page") { togglePrivacy() }
+                                } label: {
+                                    Image(systemName: "ellipsis")
+                                        .foregroundColor(textColor)
                                 }
-                                .buttonStyle(.plain)
-                                .keyboardShortcut("m", modifiers: [.command, .shift])
-                                .help(editorDictation.isRecording ? "Stop dictation. ⌘⇧M" : "Dictate into this entry. ⌘⇧M")
+                                .menuStyle(.borderlessButton)
+                                .help("Dictate, voice, images, privacy")
                                 .onHover { hovering in
-                                    isHoveringDictate = hovering
                                     isHoveringBottomNav = hovering
-                                    if hovering {
-                                        NSCursor.pointingHand.push()
-                                    } else {
-                                        NSCursor.pop()
-                                    }
-                                }
-
-                                Button(action: toggleVoiceNote) {
-                                    Image(systemName: voiceNoteRecorder.isRecording ? "waveform.circle.fill" : "waveform")
-                                        .foregroundColor(
-                                            voiceNoteRecorder.isRecording
-                                                ? .red
-                                                : (isHoveringVoiceNote ? textHoverColor : textColor)
-                                        )
-                                }
-                                .buttonStyle(.plain)
-                                .keyboardShortcut("a", modifiers: [.command, .shift])
-                                .help(voiceNoteRecorder.isRecording ? "Stop voice note. ⌘⇧A" : "Record a voice note. ⌘⇧A")
-                                .onHover { hovering in
-                                    isHoveringVoiceNote = hovering
-                                    isHoveringBottomNav = hovering
-                                    if hovering {
-                                        NSCursor.pointingHand.push()
-                                    } else {
-                                        NSCursor.pop()
-                                    }
-                                }
-
-                                if advancedImages {
-                                    Text("•")
-                                        .foregroundColor(.gray)
-
-                                    Button(action: insertClipboardImage) {
-                                        Image(systemName: "photo")
-                                            .foregroundColor(textColor)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Paste an image from the clipboard")
-
-                                    Button(action: captureScreenshot) {
-                                        Image(systemName: "camera.viewfinder")
-                                            .foregroundColor(textColor)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Capture a screenshot into this entry")
                                 }
 
                                 Text("•")
                                     .foregroundColor(.gray)
                             }
 
-                            Button(isFullscreen ? "Minimize" : "Fullscreen") {
-                                toggleFullscreen()
+                            Button(action: toggleFullscreen) {
+                                Image(systemName: isFullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                                    .foregroundColor(isHoveringFullscreen ? textHoverColor : textColor)
                             }
                             .buttonStyle(.plain)
                             .keyboardShortcut("f", modifiers: [.command, .control])
                             .help("Toggle fullscreen. ⌃⌘F")
-                            .foregroundColor(isHoveringFullscreen ? textHoverColor : textColor)
                             .onHover { hovering in
                                 isHoveringFullscreen = hovering
                                 isHoveringBottomNav = hovering
@@ -1692,7 +1678,7 @@ struct ContentView: View {
                             Button(action: {
                                 createNewEntry()
                             }) {
-                                Text("New Entry")
+                                Text("New")
                                     .font(.system(size: 13))
                             }
                             .buttonStyle(.plain)
@@ -1714,12 +1700,12 @@ struct ContentView: View {
                             
                             // Theme toggle button
                             Button(action: toggleTheme) {
-                                Image(systemName: colorScheme == .light ? "moon.fill" : "sun.max.fill")
+                                Image(systemName: followSystemAppearance ? "circle.lefthalf.filled" : (colorScheme == .light ? "moon.fill" : "sun.max.fill"))
                                     .foregroundColor(isHoveringThemeToggle ? textHoverColor : textColor)
                             }
                             .buttonStyle(.plain)
                             .keyboardShortcut("d", modifiers: [.command, .shift])
-                            .help("Toggle light and dark. ⌘⇧D")
+                            .help(followSystemAppearance ? "Following the Mac. Click to pick light or dark. ⌘⇧D" : "Toggle light and dark. ⌘⇧D")
                             .onHover { hovering in
                                 isHoveringThemeToggle = hovering
                                 isHoveringBottomNav = hovering
@@ -1785,17 +1771,12 @@ struct ContentView: View {
                     .opacity(bottomNavOpacity)
                     .onHover { hovering in
                         isHoveringBottomNav = hovering
-                        if hovering {
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                bottomNavOpacity = 1.0
-                            }
-                        } else if timerIsRunning {
-                            withAnimation(.easeIn(duration: 1.0)) {
-                                bottomNavOpacity = 0.0
-                            }
-                        }
+                        refreshChromeVisibility()
                     }
                 }
+            }
+            .onPasteCommand(of: [.png, .tiff, .image, .fileURL]) { _ in
+                insertClipboardImage()
             }
             
             // Right sidebar
@@ -2051,7 +2032,7 @@ struct ContentView: View {
                                                         
                                                         // Trash icon
                                                         Button(action: {
-                                                            deleteEntry(entry: entry)
+                                                            pendingDelete = entry
                                                         }) {
                                                             Image(systemName: "trash")
                                                                 .font(.system(size: 11))
@@ -2181,12 +2162,41 @@ struct ContentView: View {
 
                 Button("") { typewriterMode.toggle() }
                     .keyboardShortcut("y", modifiers: [.command, .shift])
+
+                Button("") { togglePrivacy() }
+                    .keyboardShortcut("p", modifiers: [.command, .shift])
+
+                Button("") { beginFind() }
+                    .keyboardShortcut("f", modifiers: .command)
+
+                Button("") { advanceFind() }
+                    .keyboardShortcut("g", modifiers: .command)
             }
             .hidden()
         )
         .frame(minWidth: 1100, minHeight: 600)
         .animation(.easeInOut(duration: 0.2), value: showingSidebar)
-        .preferredColorScheme(colorScheme)
+        .preferredColorScheme(followSystemAppearance ? nil : colorScheme)
+        .confirmationDialog(
+            "Delete this entry?",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let pendingDelete {
+                    deleteEntry(entry: pendingDelete)
+                }
+                pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingDelete = nil
+            }
+        } message: {
+            Text("This removes the markdown (and any video) from disk.")
+        }
         .onAppear {
             showingSidebar = false  // Hide sidebar by default
             selectedFont = WritingPreferences.resolvedFont(selectedFont)
@@ -2194,6 +2204,9 @@ struct ContentView: View {
             preferredTimerSeconds = WritingPreferences.resolvedTimerSeconds(preferredTimerSeconds)
             if !timerIsRunning {
                 timeRemaining = preferredTimerSeconds
+            }
+            if followSystemAppearance {
+                colorScheme = systemColorScheme
             }
             if isJournalUnlocked {
                 loadExistingEntries()
@@ -2205,6 +2218,21 @@ struct ContentView: View {
                     isJournalUnlocked = true
                     loadExistingEntries()
                 }
+            }
+        }
+        .overlay {
+            if privacyHidden, isJournalUnlocked, !showingVideoRecording {
+                PrivacyVeil { privacyHidden = false }
+            }
+        }
+        .overlay(alignment: .top) {
+            if showingFind, currentVideoURL == nil {
+                FindBar(
+                    query: $findQuery,
+                    matchLabel: findMatchLabel,
+                    onNext: advanceFind,
+                    onClose: { showingFind = false; findQuery = ""; findIndex = nil }
+                )
             }
         }
         .overlay {
@@ -2252,15 +2280,31 @@ struct ContentView: View {
             }
             saveChatHistory(ollamaService.messages, for: entry)
         }
-        .onChange(of: text) { _ in
-            // Save current entry when text changes
+        .onReceive(saveTimer) { _ in
+            refreshChromeVisibility()
+            guard SaveDebounce.shouldFlush(dirty: textNeedsSave) else { return }
             if let currentId = selectedEntryId,
                let currentEntry = entries.first(where: { $0.id == currentId }),
                currentEntry.entryType == .text {
                 saveEntry(entry: currentEntry)
             }
+            textNeedsSave = false
+        }
+        .onChange(of: text) { _ in
+            lastActivityAt = Date()
+            textNeedsSave = true
+            adoptBareImagePathsIfNeeded()
             if typewriterMode, currentVideoURL == nil {
                 TypewriterScroll.centerCaretInKeyWindow()
+            }
+        }
+        .onChange(of: findQuery) { _, _ in
+            findIndex = nil
+            advanceFind()
+        }
+        .onChange(of: systemColorScheme) { _, newValue in
+            if followSystemAppearance {
+                colorScheme = newValue
             }
         }
         .onChange(of: typewriterMode) { _, enabled in
@@ -2344,10 +2388,7 @@ struct ContentView: View {
     }
 
     private var currentWordCount: Int {
-        text
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .split { $0.isWhitespace || $0.isNewline }
-            .count
+        MarkdownExtras.wordCount(text)
     }
 
     private var writingStreak: Int {
@@ -2456,7 +2497,9 @@ struct ContentView: View {
                 if fileManager.fileExists(atPath: fileURL.path) {
                     let rawText = try String(contentsOf: fileURL, encoding: .utf8)
                     // Strip legacy leading newlines from older entries
-                    text = String(rawText.drop(while: { $0 == "\n" }))
+                    text = MarkdownExtras.scrubbingPage(String(rawText.drop(while: { $0 == "\n" })))
+                    adoptBareImagePathsIfNeeded()
+                    text = MarkdownExtras.scrubbingPage(text)
                     print("Successfully loaded entry: \(entry.filename)")
                 }
             } catch {
@@ -2480,8 +2523,53 @@ struct ContentView: View {
     }
 
     private func toggleTheme() {
+        followSystemAppearance = false
         colorScheme = colorScheme == .light ? .dark : .light
         UserDefaults.standard.set(colorScheme == .light ? "light" : "dark", forKey: "colorScheme")
+    }
+
+    private func togglePrivacy() {
+        privacyHidden.toggle()
+    }
+
+    private func refreshChromeVisibility() {
+        let visible = IdleFade.chromeVisible(
+            idleFadeEnabled: idleFadeEnabled,
+            idleFor: Date().timeIntervalSince(lastActivityAt),
+            timerRunning: timerIsRunning,
+            hovering: isHoveringBottomNav,
+            forceVisible: showingSidebar || showingFind || showingSettings || showingOllamaPanel || showingVideoRecording || privacyHidden
+        )
+        let target: Double = visible ? 1.0 : 0.0
+        guard bottomNavOpacity != target else { return }
+        withAnimation(.easeInOut(duration: visible ? 0.2 : 1.0)) {
+            bottomNavOpacity = target
+        }
+    }
+
+    private func beginFind() {
+        guard currentVideoURL == nil else { return }
+        showingFind = true
+    }
+
+    private var findRanges: [NSRange] {
+        PageFind.ranges(in: MarkdownExtras.visibleBody(text), query: findQuery)
+    }
+
+    private var findMatchLabel: String {
+        let ranges = findRanges
+        guard !findQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "" }
+        if ranges.isEmpty { return "0 matches" }
+        let current = (findIndex ?? 0) + 1
+        return "\(current) of \(ranges.count)"
+    }
+
+    private func advanceFind() {
+        let ranges = findRanges
+        findIndex = PageFind.nextIndex(after: findIndex, count: ranges.count)
+        if let findIndex {
+            PageFind.select(ranges[findIndex])
+        }
     }
 
     private func toggleHistorySidebar() {
@@ -2573,7 +2661,7 @@ struct ContentView: View {
     }
 
     private var currentMermaidCharts: [MermaidFlow.Chart] {
-        MarkdownExtras.mermaidBlocks(in: text).map(MermaidFlow.parse)
+        MarkdownExtras.mermaidSources(in: text).map(MermaidFlow.parse)
     }
 
     private var todaysWordCount: Int {
@@ -2620,12 +2708,28 @@ struct ContentView: View {
     }
 
     private func insertClipboardImage() {
-        guard advancedImages, currentVideoURL == nil else { return }
+        guard currentVideoURL == nil else { return }
         guard let image = ImageStore.imageFromClipboard() else {
             showTransientMessage("Copy an image first, then paste")
             return
         }
         insertImage(image, alt: "image")
+    }
+
+    private func adoptBareImagePathsIfNeeded() {
+        guard currentVideoURL == nil else { return }
+        guard let entry = entries.first(where: { $0.id == selectedEntryId }) else { return }
+        let next = ImageStore.replacingBareImagePaths(in: text) { path in
+            guard let image = ImageStore.image(fromFilePath: path) else { return nil }
+            return try? ImageStore.savePNG(
+                image,
+                documentsDirectory: documentsDirectory,
+                entryFilename: entry.filename
+            )
+        }
+        if next != text {
+            text = MarkdownExtras.scrubbingPage(next)
+        }
     }
 
     private func captureScreenshot() {
@@ -2653,6 +2757,7 @@ struct ContentView: View {
 
     private func createNewEntry() {
         finishVoiceNoteIfRecording()
+        flushSaveIfNeeded()
         let newEntry = HumanEntry.createNew()
         entries.insert(newEntry, at: 0) // Add to the beginning
         selectedEntryId = newEntry.id
@@ -2684,18 +2789,14 @@ struct ContentView: View {
     
     private func openChatGPT() {
         let fullText = effectiveChatGPTPrompt + "\n\n" + currentChatSourceText()
-        
-        if let encodedText = fullText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-           let url = URL(string: "https://chat.openai.com/?prompt=" + encodedText) {
+        if let url = ChatURL.chatGPT(fullText) {
             NSWorkspace.shared.open(url)
         }
     }
     
     private func openClaude() {
         let fullText = effectiveClaudePrompt + "\n\n" + currentChatSourceText()
-        
-        if let encodedText = fullText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-           let url = URL(string: "https://claude.ai/new?q=" + encodedText) {
+        if let url = ChatURL.claude(fullText) {
             NSWorkspace.shared.open(url)
         }
     }
@@ -2724,14 +2825,20 @@ struct ContentView: View {
         return names.compactMap { name in entries.first(where: { $0.filename == name }) }.first
     }
 
-    private func selectEntry(_ entry: HumanEntry) {
-        if selectedEntryId == entry.id { return }
-        finishVoiceNoteIfRecording()
+    private func flushSaveIfNeeded() {
+        guard textNeedsSave else { return }
         if let currentId = selectedEntryId,
            let currentEntry = entries.first(where: { $0.id == currentId }),
            currentEntry.entryType == .text {
             saveEntry(entry: currentEntry)
         }
+        textNeedsSave = false
+    }
+
+    private func selectEntry(_ entry: HumanEntry) {
+        if selectedEntryId == entry.id { return }
+        finishVoiceNoteIfRecording()
+        flushSaveIfNeeded()
         guard let target = entries.first(where: { $0.id == entry.id }) else { return }
         selectedEntryId = target.id
         loadEntry(entry: target)
@@ -2830,7 +2937,7 @@ struct ContentView: View {
            let transcript = loadTranscriptText(for: videoFilename) {
             return transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return MarkdownExtras.visibleBody(text).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func saveVideoEntry(from tempURL: URL, transcript: String?) {

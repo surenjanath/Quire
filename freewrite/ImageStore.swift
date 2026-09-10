@@ -10,12 +10,76 @@ import AppKit
 
 enum ImageStore {
     static func imageFromClipboard() -> NSImage? {
-        NSPasteboard.general.readObjects(forClasses: [NSImage.self], options: nil)?.first as? NSImage
+        let pasteboard = NSPasteboard.general
+        if let image = pasteboard.readObjects(forClasses: [NSImage.self], options: nil)?.first as? NSImage {
+            return image
+        }
+        if let data = pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff) {
+            return NSImage(data: data)
+        }
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
+            return urls.compactMap { NSImage(contentsOf: $0) }.first
+        }
+        if let plain = clipboardPlainText(), let image = image(fromFilePath: plain) {
+            return image
+        }
+        return nil
     }
 
     static func clipboardHasPlainText() -> Bool {
-        guard let string = NSPasteboard.general.string(forType: .string) else { return false }
-        return !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard let string = clipboardPlainText() else { return false }
+        return !string.isEmpty
+    }
+
+    static func clipboardPlainText() -> String? {
+        NSPasteboard.general.string(forType: .string)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static let imageExtensions: Set<String> = [
+        "png", "jpg", "jpeg", "gif", "webp", "tif", "tiff", "heic", "heif", "bmp"
+    ]
+
+    static func resolvedFilePath(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("file://") {
+            if let url = URL(string: trimmed) {
+                return url.path
+            }
+            let withoutScheme = String(trimmed.dropFirst("file://".count))
+            return withoutScheme.removingPercentEncoding ?? withoutScheme
+        }
+        return trimmed
+    }
+
+    static func isImageFilePath(_ text: String) -> Bool {
+        let path = resolvedFilePath(text)
+        guard path.hasPrefix("/") else { return false }
+        let ext = (path as NSString).pathExtension.lowercased()
+        return imageExtensions.contains(ext)
+    }
+
+    static func shouldPreferClipboardImage(hasImage: Bool, plainText: String?) -> Bool {
+        hasImage
+    }
+
+    static func image(fromFilePath text: String) -> NSImage? {
+        let path = resolvedFilePath(text)
+        guard isImageFilePath(path) else { return nil }
+        return NSImage(contentsOfFile: path)
+    }
+
+    static func replacingBareImagePaths(in text: String, importing: (String) -> String?) -> String {
+        text
+            .components(separatedBy: "\n")
+            .map { line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard isImageFilePath(trimmed), let relative = importing(trimmed) else {
+                    return line
+                }
+                return "![screenshot](\(relative))"
+            }
+            .joined(separator: "\n")
     }
 
     @discardableResult

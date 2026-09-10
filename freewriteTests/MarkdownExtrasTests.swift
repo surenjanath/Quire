@@ -26,9 +26,64 @@ struct MarkdownExtrasTests {
     }
 
     @Test func insertsImageMarkdownAtEnd() {
-        let next = MarkdownExtras.insertImage(into: "\n\nhello", relativePath: "Media/abc/shot.png", alt: "screenshot")
+        let next = MarkdownExtras.insertImage(into: "hello", relativePath: "Media/abc/shot.png", alt: "screenshot")
+        #expect(next.contains("hello"))
         #expect(next.contains("![screenshot](Media/abc/shot.png)"))
-        #expect(next.hasPrefix("\n\nhello"))
+        #expect(!next.hasPrefix("\n\n"))
+    }
+
+    @Test func scrubsBareImagePathsAndExtraBlankLines() {
+        let messy = """
+
+        hello i am me
+        Start → Write
+
+
+        /var/folders/x/T/Screenshot.png
+
+        ## test
+        ![screenshot](Media/entry/shot-1.png)
+        """
+        let clean = MarkdownExtras.scrubbingPage(messy)
+        #expect(clean.hasPrefix("hello i am me"))
+        #expect(clean.contains("## test"))
+        #expect(clean.contains("![screenshot](Media/entry/shot-1.png)"))
+        #expect(!clean.contains("/var/folders/x/T/Screenshot.png"))
+        #expect(!clean.contains("\n\n\n"))
+    }
+
+    @Test func hidesImageMarkdownAndBarePathsFromThePage() {
+        let stored = """
+        hello i am me
+        Start → Write
+        /var/folders/x/T/Screenshot.png
+        ## test
+        ![screenshot](Media/entry/shot-1.png)
+        """
+        let visible = MarkdownExtras.hidingImageLines(stored)
+        #expect(visible.contains("hello i am me"))
+        #expect(visible.contains("## test"))
+        #expect(!visible.contains("![screenshot]"))
+        #expect(!visible.contains("/var/folders/x/T/Screenshot.png"))
+        #expect(!visible.contains("Media/entry/shot-1.png"))
+
+        let edited = visible.replacingOccurrences(of: "hello i am me", with: "hello again")
+        let restored = MarkdownExtras.restoringImageLines(visible: edited, stored: stored)
+        #expect(restored.contains("hello again"))
+        #expect(restored.contains("![screenshot](Media/entry/shot-1.png)"))
+        #expect(!restored.contains("hello i am me"))
+    }
+
+    @Test func wordCountIgnoresImageJunk() {
+        let page = """
+        hello i am me
+        Start → Write
+        /var/folders/x/T/Screenshot.png
+        ![screenshot](Media/entry/shot-1.png)
+        """
+        #expect(MarkdownExtras.wordCount(page) == 6)
+        #expect(MarkdownExtras.visibleBody(page).contains("hello i am me"))
+        #expect(!MarkdownExtras.visibleBody(page).contains("Media/entry"))
     }
 
     @Test func extractsAnnotationsAndHighlights() {

@@ -24,6 +24,8 @@ struct MermaidFlowTests {
         """
         #expect(MarkdownExtras.mermaidBlocks(in: text) == ["graph TD\n  A[Start] --> B[Write]"])
         #expect(MarkdownExtras.mermaidBlocks(in: "no charts").isEmpty)
+        #expect(MarkdownExtras.mermaidSources(in: "Start → Write") == ["Start → Write"])
+        #expect(MarkdownExtras.mermaidSources(in: "hello i am me").isEmpty)
     }
 
     @Test func parsesFlowchartNodesAndEdges() {
@@ -42,6 +44,9 @@ struct MermaidFlowTests {
             MermaidFlow.Edge(from: "A", to: "B"),
             MermaidFlow.Edge(from: "B", to: "C"),
         ])
+        let loose = MermaidFlow.parse("Start → Write")
+        #expect(loose.edges == [MermaidFlow.Edge(from: "Start", to: "Write")])
+        #expect(loose.nodes.map(\.label) == ["Start", "Write"])
     }
 }
 

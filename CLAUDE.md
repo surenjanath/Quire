@@ -1024,6 +1024,12 @@ are sanitized by `WritingPreferences`.
 - **Mermaid**: Settings → Advanced. Fence a chart as a mermaid code block (`graph TD` / `A[Start] --> B`). A quiet strip under the page lists the edges.
 - **Draw on screenshots**: With images on, click a thumbnail to ink on it. Save burns the strokes into the PNG.
 - **Daily word goal**: Settings → Advanced. 0 hides it. Otherwise History shows today's words toward the goal.
+- **Privacy blur**: Eye button / ⌘⇧P covers the page in public. ⌘F finds in the current entry. Trash asks before deleting. ChatGPT/Claude URLs encode `&`. Saves debounce on a 1s timer. Settings can match the Mac appearance; theme toggle no longer recreates the editor.
+- **Idle fade**: Settings → Advanced. After eight seconds without typing, the bottom bar hides. Hover the bottom edge to bring it back.
+- **Bottom bar**: Words, timer, Chat, New, and icons stay in the row. Dictate, voice, images, and privacy live under the ⋯ menu. Image markdown and leftover screenshot paths are hidden from the page.
+- **Tests**: `./run-tests.sh` compiles the logic files without Xcode and must print `PASS`. Word count and find use the visible page (no image markdown). A line like `Start → Write` becomes a mermaid strip when Advanced diagrams are on.
+- **Favorite fonts**: Font menu → Add to favorites. Starred faces sit at the top.
+- **IME-safe backspace lock**: Delete still works while composing Japanese/Chinese marked text.
 
 ### PDF Export Implementation
 

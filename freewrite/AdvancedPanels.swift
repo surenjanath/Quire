@@ -128,17 +128,21 @@ struct ImageStrip: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 ForEach(paths, id: \.self) { path in
                     if let image = NSImage(contentsOf: documentsDirectory.appendingPathComponent(path)) {
                         Button(action: { onEdit?(path) }) {
                             ZStack(alignment: .bottomTrailing) {
                                 Image(nsImage: image)
                                     .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(width: 72, height: 72)
-                                    .clipped()
-                                    .cornerRadius(4)
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 120, height: 72)
+                                    .background(Color.gray.opacity(0.06))
+                                    .cornerRadius(6)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .stroke(Color.gray.opacity(0.25), lineWidth: 1)
+                                    )
                                 if onEdit != nil {
                                     Image(systemName: "pencil")
                                         .font(.system(size: 9, weight: .semibold))
@@ -158,5 +162,6 @@ struct ImageStrip: View {
             .padding(.vertical, 8)
         }
         .frame(height: 88)
+        .background(Color.gray.opacity(0.04))
     }
 }
