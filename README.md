@@ -8,7 +8,7 @@ A blank page for stream-of-consciousness writing, with a journal, voice, video, 
 
 ## Look
 
-A 12-second tour of the page, dark mode, Settings, the History calendar, and the bottom bar:
+A short tour of the page, dark mode, Settings, and the History calendar:
 
 <video src="docs/media/tour.mp4" width="900" controls muted></video>
 
@@ -33,6 +33,12 @@ The month heatmap and the writing bar, captured from the running app:
 <p align="center">
   <img src="docs/media/toolbar.png" alt="Font, timer, chat, dictation, and history controls" width="900">
 </p>
+
+Offline chat, grounded in the journal, and the quick ⋯ menu for dictation, voice notes, and the rest:
+
+| Chat | Quick menu |
+|---|---|
+| <img src="docs/media/chat.png" alt="Offline Ollama chat grounded in the journal"> | <img src="docs/media/menu.png" alt="The bottom-right quick menu: dictate, voice note, screenshot, and more" width="280"> |
 
 ## The idea
 
