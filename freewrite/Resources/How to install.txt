@@ -1,0 +1,17 @@
+Quire
+====
+
+1. Drag Quire into your Applications folder.
+2. The first time, right-click Quire and choose Open.
+   macOS asks because this copy is signed on the machine that built it.
+3. Click Open again if asked.
+
+Your pages stay on this Mac, usually in Documents/Freewrite.
+
+Quire → Settings (or ⌘,) has two tabs: Chat and Writing.
+⌘K opens Go — type a command or a word from an old page.
+Earlier versions live under Go, or Journal → Earlier Versions.
+⌘⇧L focuses the sentence under the caret.
+File → New Page starts a blank entry.
+Journal → Chat talks to a local Ollama model if you have one running.
+Chat → Claude Code or Codex opens a side panel on this Mac.

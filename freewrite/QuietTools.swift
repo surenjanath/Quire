@@ -62,6 +62,15 @@ enum PageFind {
         return true
     }
 
+    static func selectedText(in view: NSView? = NSApp.keyWindow?.contentView) -> String? {
+        guard let textView = firstTextView(in: view) else { return nil }
+        let range = textView.selectedRange()
+        guard range.length > 0 else { return nil }
+        let ns = textView.string as NSString
+        guard NSMaxRange(range) <= ns.length else { return nil }
+        return ns.substring(with: range)
+    }
+
     private static func firstTextView(in view: NSView?) -> NSTextView? {
         guard let view else { return nil }
         if let textView = view as? NSTextView { return textView }

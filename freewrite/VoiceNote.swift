@@ -27,6 +27,12 @@ enum VoiceNote {
         return link + "\n\n" + existing
     }
 
+    static func isMarkdownLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix("[voice note]("), trimmed.hasSuffix(")") else { return false }
+        return !refs(in: trimmed).isEmpty
+    }
+
     static func refs(in text: String) -> [String] {
         guard let regex = try? NSRegularExpression(pattern: #"\[voice note\]\(([^)]+)\)"#) else {
             return []

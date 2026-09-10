@@ -2,8 +2,9 @@
 //  MarkdownExtras.swift
 //  freewrite
 //
-//  Opt-in markdown helpers: wiki links, image refs, annotations, and a
-//  filename graph. Used only when Advanced features are enabled.
+//  Opt-in markdown helpers: wiki links, image refs, voice-note links,
+//  annotations, and a filename graph. Image and voice-note lines stay on
+//  disk but are hidden from the editor.
 //
 
 import Foundation
@@ -38,6 +39,14 @@ enum MarkdownExtras {
         }?.filename
     }
 
+    static func readableImageRefs(in text: String, documentsDirectory: URL) -> [String] {
+        imageRefs(in: text).filter { relative in
+            let url = documentsDirectory.appendingPathComponent(relative)
+            guard FileManager.default.isReadableFile(atPath: url.path) else { return false }
+            return (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0 > 32
+        }
+    }
+
     static func imageRefs(in text: String) -> [String] {
         let pattern = "!\\[[^\\]]*\\]\\(([^\\)]+)\\)"
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
@@ -60,19 +69,23 @@ enum MarkdownExtras {
         return isImageMarkdownLine(trimmed) || ImageStore.isImageFilePath(trimmed)
     }
 
+    static func isHiddenEditorLine(_ line: String) -> Bool {
+        isHiddenImageLine(line) || VoiceNote.isMarkdownLine(line)
+    }
+
     static func hidingImageLines(_ text: String) -> String {
         text
             .components(separatedBy: "\n")
-            .filter { !isHiddenImageLine($0) }
+            .filter { !isHiddenEditorLine($0) }
             .joined(separator: "\n")
     }
 
     static func restoringImageLines(visible: String, stored: String) -> String {
-        let imageLines = stored
+        let hiddenLines = stored
             .components(separatedBy: "\n")
-            .filter { isImageMarkdownLine($0) }
+            .filter { isImageMarkdownLine($0) || VoiceNote.isMarkdownLine($0) }
         var seen = Set<String>()
-        let unique = imageLines.filter { seen.insert($0).inserted }
+        let unique = hiddenLines.filter { seen.insert($0).inserted }
         var body = hidingImageLines(visible)
         guard !unique.isEmpty else { return body }
         while body.hasSuffix("\n\n") {

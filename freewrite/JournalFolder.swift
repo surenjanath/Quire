@@ -44,10 +44,15 @@ enum JournalFolder {
         root.appendingPathComponent("Chats", isDirectory: true)
     }
 
+    static func versionsURL(root: URL) -> URL {
+        root.appendingPathComponent("Versions", isDirectory: true)
+    }
+
     static func ensureLayout(at root: URL, fileManager: FileManager = .default) throws {
         try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
         try fileManager.createDirectory(at: videosURL(root: root), withIntermediateDirectories: true)
         try fileManager.createDirectory(at: chatsURL(root: root), withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: versionsURL(root: root), withIntermediateDirectories: true)
     }
 
     @discardableResult

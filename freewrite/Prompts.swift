@@ -45,6 +45,14 @@ enum PromptLibrary {
     My entry:
     """
 
+    static func effectiveTone(ollama: String, claude: String, chatGPT: String) -> String {
+        let candidates = [ollama, claude, chatGPT]
+        if let custom = candidates.first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
+            return custom
+        }
+        return defaultOllamaPrompt
+    }
+
     static let defaultWeeklyReviewPrompt = """
     You are a thoughtful friend reading my journal from the last week. Don't recap every day. Find the patterns, the tension, and the one thing I keep circling. Talk to me like a close friend who actually read all of it. Keep it to a few honest paragraphs.
 

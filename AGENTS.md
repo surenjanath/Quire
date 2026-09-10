@@ -82,7 +82,14 @@ freewrite/
 │   ├── JournalInsights.swift     # On-this-day, weekly window, session recap, month heatmap
 │   ├── WritingSpark.swift        # Daily empty-page prompt (stable for the whole day)
 │   ├── VoiceNote.swift           # Voice-note markdown, m4a storage, recorder
-│   ├── JournalTags.swift         # #tag extraction
+│   ├── JournalTags.swift         # #tag extraction + suggestions
+│   ├── JournalApply.swift        # Put an Ollama reply on the page without wiping images
+│   ├── JournalContinuity.swift   # Yesterday's last sentence on an empty page
+│   ├── JournalContext.swift      # Ground Ollama in related journal pages
+│   ├── OllamaSettings.swift      # Thinking, temperature, context, system prompt
+│   ├── QuireAction.swift         # Menu/toolbar notifications + About copy
+│   ├── LocalAgent.swift          # Claude Code / Codex CLI jobs + streaming
+│   ├── AgentPanelView.swift      # Side panel to watch Claude Code / Codex write
 │   ├── MermaidFlow.swift         # Offline mermaid flowchart parse + strip
 │   ├── ImageAnnotator.swift      # Draw-on-screenshot canvas
 │   ├── WritingGoal.swift         # Optional daily word-goal meter
@@ -90,7 +97,16 @@ freewrite/
 │   ├── JournalLock.swift         # Optional Touch ID / password launch gate
 │   ├── JournalChrome.swift       # History month grid + voice-note play strip
 │   ├── TypewriterScroll.swift    # Center the caret in the editor while typing
-│   ├── SettingsView.swift        # Settings sheet: AI prompts + Ollama config (tabbed)
+│   ├── WritingFocus.swift        # Idle fade, favorite fonts, IME lock, sentence focus
+│   ├── CommandGo.swift           # ⌘K go palette: commands + journal pages
+│   ├── PageVersions.swift        # Snapshots before Chat / agent apply
+│   ├── PageCompare.swift         # Now vs After before Insert / Replace
+│   ├── JournalExport.swift       # Zip markdown + Media + Versions
+│   ├── CaptureDevices.swift      # Camera / mic pick
+│   ├── PageLock.swift            # Per-page Touch ID gate
+│   ├── QuietSounds.swift         # Typewriter ticks + room tone
+│   ├── SoftMarkdown.swift        # Dim markdown markers
+│   ├── SettingsView.swift        # Settings: Chat (agents + tone + Ollama) and Writing
 │   ├── Prompts.swift             # Default AI prompts + Ollama persona presets
 │   ├── AppSettingsKeys.swift     # Shared UserDefaults keys/defaults
 │   └── freewrite.entitlements    # App permissions
@@ -174,7 +190,7 @@ The main view containing all UI and business logic.
 - `createNewEntry()` - Creates new text entry
 - `saveEntry(entry:)` - Saves text to .md file
 - `loadEntry(entry:)` - Loads text or video for display
-- `deleteEntry(entry:)` - Deletes entry and associated files
+- `deleteEntry(entry:)` - Moves entry and associated files to the macOS Trash (see `moveToTrash`)
 - `saveVideoEntry(from:)` - Saves recorded video and creates metadata
 
 **Important**: When modifying the `entries` array from async contexts, wrap in `DispatchQueue.main.async` to prevent collection mutation crashes.
@@ -861,8 +877,11 @@ the History sidebar, gated on `showingOllamaPanel`. Mutually exclusive with the 
 - Header has a model picker (persisted via `AppSettingsKeys.ollamaModel`), refresh button, and (once
   a conversation has started) a "New Chat" button that calls `resetConversation()` + restarts.
 - Footer has an "Ask a follow-up..." `TextField` (multi-line, `axis: .vertical`) + send button
-  wired to `sendFollowUp`, plus Stop (while streaming)/Copy/Insert acting on the **last assistant
-  message** (`lastAssistantMessage`), not the whole transcript.
+  wired to `sendFollowUp`, plus Stop (while streaming)/Copy/Insert/Replace/Note acting on the **last assistant
+  message** (`lastAssistantMessage`), not the whole transcript. Insert appends, Replace rewrites the
+  visible page (image markdown stays), Note adds the first sentence as `>> …`. Undo puts the page
+  back. Suggested `#tags` from repeated words on the page sit above those buttons. Highlight text
+  before opening Chat to ground Continue / Tighten / Ask in that passage.
 - Switching the model picker mid-conversation calls `restart()` (reset + start fresh) rather than
   continuing the old transcript with a different model.
 
@@ -872,13 +891,19 @@ kicks off the first generation.
 
 ### Settings (SettingsView.swift)
 
-Gear-icon button in the bottom-right utility bar opens a `.sheet` with a `TabView` (two tabs):
-- **Ollama** tab: endpoint field (`AppSettingsKeys.ollamaEndpoint`, default
-  `http://localhost:11434`), "Test Connection" (calls `OllamaService.fetchModels`), default-model
-  picker
-- **Prompts** tab: a segmented control switches between ChatGPT/Claude/Ollama, each editing its
-  `AppSettingsKeys.customXPrompt` value in one large `TextEditor` with "Reset to Default" (clears
-  the stored override so `PromptLibrary`'s default takes over again)
+The writing bar (words, timer, Chat, New, Settings), the ••• menu, ⌘,, and Quire → Settings
+open a panel overlay on the page. Never use `Settings { }` or `Window("Settings")` —
+macOS draws every letter twice (Folderer, Pageage, Lockk). Do not put a gear in the
+window title bar. Writing / Chat / About pills, grouped cards, switches on the right.
+Do not put a `TabView` in this panel. The Dock icon is `Resources/AppIcon.icns`; `./build.sh`
+writes `build/Quire.app` and `build/Quire.zip`.
+- **Chat** tab: Claude Code / Codex paths, one shared tone (`PromptLibrary.effectiveTone` —
+  prefers a custom Ollama tone, then leftover Claude/ChatGPT values), Ollama endpoint + test,
+  default model, thinking (`off` / `on` / `low` / `medium` / `high` / `max`), temperature,
+  context size, and the Ollama system prompt. Show/hide thinking lives only in the Chat ••• menu.
+- **Writing** tab: folder, page toggles, lock, camera/mic, extras (images, graph, notes, mermaid)
+- **About** tab: the room, Surenjanath (email + GitHub), journal folder, privacy,
+  what’s included, shortcuts. Copy lives on `QuireAction`.
 
 ### Sidebar Search & Writing Streak
 
@@ -986,6 +1011,8 @@ mid-session without opening Settings; `effectivePrompt` composes
 | Cmd+Shift+A | Record a voice note (audio file + live transcript) |
 | Cmd+Shift+O | Open Ollama chat (gated by `canOfferOllamaChat()`) |
 | Cmd+Shift+R | Weekly Ollama review of the last 7 days |
+| Cmd+K | Go: commands and journal search |
+| Cmd+Shift+L | Focus this sentence |
 | Cmd+Shift+Y | Toggle typewriter scroll |
 
 Cmd+Shift+O and Cmd+Shift+T are hidden buttons on the root view. The others are attached to the
@@ -1018,16 +1045,28 @@ are sanitized by `WritingPreferences`.
 - **Daily spark**: Empty-page placeholder comes from `WritingSpark.prompt(for:)` and stays the same all day.
 - **History calendar**: Month heatmap in the History sidebar. Days with entries are outlined; click jumps to that day's latest note.
 - **Voice notes**: Waveform button (⌘⇧A) records an `.m4a` under `Media/[entry-base]/` and prepends `[voice note](…)` while live dictation fills the page. A play strip appears when an entry has voice clips.
-- **Journal folder**: Settings → Advanced can point at any folder via a security-scoped bookmark (`journalFolderBookmark`). Videos and Chats stay under that root. Reset returns to `~/Documents/Freewrite` (or the sandbox container equivalent). Changing folder reloads History.
-- **Touch ID lock**: Settings → Advanced toggle. Off by default. When on, launch shows a lock overlay and prompts for Touch ID or the Mac password before loading entries. This is a gate only — files on disk stay plain markdown.
+- **Journal folder**: Settings → Writing can point at any folder via a security-scoped bookmark (`journalFolderBookmark`). Videos and Chats stay under that root. Reset returns to `~/Documents/Freewrite` (or the sandbox container equivalent). Changing folder reloads History.
+- **Touch ID lock**: Settings → Writing toggle. Off by default. When on, launch shows a lock overlay and prompts for Touch ID or the Mac password before loading entries. This is a gate only — files on disk stay plain markdown.
 - **Tags**: `#river` chips appear under the page. Clicking one searches History for that tag. Headings (`# Title`) are ignored.
-- **Mermaid**: Settings → Advanced. Fence a chart as a mermaid code block (`graph TD` / `A[Start] --> B`). A quiet strip under the page lists the edges.
+- **Mermaid**: Settings → Writing. Fence a chart as a mermaid code block (`graph TD` / `A[Start] --> B`). A quiet strip under the page lists the edges.
 - **Draw on screenshots**: With images on, click a thumbnail to ink on it. Save burns the strokes into the PNG.
-- **Daily word goal**: Settings → Advanced. 0 hides it. Otherwise History shows today's words toward the goal.
-- **Privacy blur**: Eye button / ⌘⇧P covers the page in public. ⌘F finds in the current entry. Trash asks before deleting. ChatGPT/Claude URLs encode `&`. Saves debounce on a 1s timer. Settings can match the Mac appearance; theme toggle no longer recreates the editor.
-- **Idle fade**: Settings → Advanced. After eight seconds without typing, the bottom bar hides. Hover the bottom edge to bring it back.
+- **Daily word goal**: Settings → Writing. 0 hides it. Otherwise History shows today's words toward the goal.
+- **Privacy blur**: Eye button / ⌘⇧P covers the page in public. ⌘F finds in the current entry. Trash asks before deleting, then moves the entry (and its video/chat assets) to the macOS Trash via `moveToTrash` rather than a permanent delete — recoverable from Finder, falling back to a real delete only if Trash itself is unavailable for that path. ChatGPT/Claude URLs encode `&`. Saves debounce on a 1s timer. Settings can match the Mac appearance; theme toggle no longer recreates the editor.
+- **Idle fade**: Settings → Writing. After eight seconds without typing, the bottom bar hides. Hover the bottom edge to bring it back.
 - **Bottom bar**: Words, timer, Chat, New, and icons stay in the row. Dictate, voice, images, and privacy live under the ⋯ menu. Image markdown and leftover screenshot paths are hidden from the page.
 - **Tests**: `./run-tests.sh` compiles the logic files without Xcode and must print `PASS`. Word count and find use the visible page (no image markdown). A line like `Start → Write` becomes a mermaid strip when Advanced diagrams are on.
+- **Grounded Ollama**: Chat packs the current page plus related past entries. The system prompt tells the model to use only that text, skip the stock greeting, and keep reasoning in thinking. Follow-ups re-search the journal. Continue / Tighten / Ask sit under the composer. Highlight a passage first to talk about just that. Insert / Replace / Note put the reply on the page (stock greeting stripped; images stay). Undo restores the page. Repeated words become suggested `#tags`. Settings can set thinking, temperature, and context.
+- **Claude Code / Codex**: Chat menu opens a side panel (`AgentPanelView`). Reflect / Improve / Diagram / Ask stream into the panel. Insert / Replace / Note / Undo put the reply on the page. Follow-ups resend the journal plus your question. Paths live in Settings → Chat. The journal is sent on stdin. Mermaid turns on if a chart comes back. SVG fences are saved under Media.
+- **Go (⌘K)**: A small sheet for commands (Chat, Claude Code, New, Settings…) and a search of past pages. Journal → Go. Type a word from an old page to jump there. Random page is in the list.
+- **Page versions**: Chat Insert/Replace/Note and Claude Code / Codex snapshot the page first under `Versions/[entry-base]/`. Last 20. Restore from Go → Earlier versions, Journal menu, or ⋯. Restore snapshots the current page first. Images stay via `MarkdownExtras.restoringImageLines`.
+- **Compare then apply**: Insert / Replace / Note open Now vs After (`ApplyCompareView`). Put on page confirms. `PageCompare.swift`.
+- **Journal zip**: File → Export Journal. `JournalExport` copies `*.md`, `Media/`, `Versions/`. Skips Videos and Chats. `ditto -c -k`.
+- **Capture devices**: Settings → Writing camera / mic pickers. `CaptureDevices` + `CameraManager.setupCamera`. Voice notes still use the Mac input.
+- **Per-page lock**: History lock icon. `PageLock` stores UUIDs. Touch ID to open or unlock. Disk stays markdown.
+- **Quiet sounds**: Typewriter `Tink` and generated room tone. Off by default.
+- **Soft markdown**: Dim markers via `SoftMarkdown.markerRanges`. Font menu + Settings.
+- **Sentence focus (⌘⇧L)**: Dims every sentence except the one under the caret, like iA Writer. Font menu toggle. Stays off until you turn it on.
+- **Yesterday continue**: An empty page can show yesterday's last sentence. Click it to start from there.
 - **Favorite fonts**: Font menu → Add to favorites. Starred faces sit at the top.
 - **IME-safe backspace lock**: Delete still works while composing Japanese/Chinese marked text.
 
@@ -1068,6 +1107,27 @@ UserDefaults.standard.set(colorScheme == .light ? "light" : "dark", forKey: "col
 - Dark mode text: `Color(red: 0.9, green: 0.9, blue: 0.9)` (off-white, not pure white)
 
 ## Common Pitfalls
+
+### Deletes Go to Trash, Not `removeItem`
+
+`deleteEntry`, `deleteChatHistory`, and `deleteVideoAssets` all route through `moveToTrash(_:)`,
+which calls `FileManager.trashItem(at:resultingItemURL:)` first and only falls back to a permanent
+`removeItem` if Trash itself throws. This is the Apple-recommended pattern for App Sandbox apps
+deleting user files, and it means an accidental delete — the one destructive action in Quire with
+no in-app Undo — is recoverable from Finder. Video assets are trashed as a whole managed directory
+(video + thumbnail + transcript together) rather than as scattered individual files, so a restore
+brings the entry back intact. When adding a new kind of per-entry file, delete it through
+`moveToTrash`, not `fileManager.removeItem` directly.
+
+### Local Agent Process I/O: Drain Both Pipes
+
+`LocalAgent.run` (Claude Code / Codex) must install a `readabilityHandler` on **both** the stdout
+and stderr pipes before calling `process.run()`, and only remove them after `waitUntilExit()`. A
+pipe's kernel buffer is small (~64KB); if only stdout is drained live, a CLI that writes a lot to
+stderr (progress, deprecation warnings, telemetry) can block on its next write once that buffer
+fills, and `waitUntilExit()` blocks forever waiting for a child that is itself blocked — a silent,
+uncancelable hang with no error surfaced to the UI. Any future `Process` + `Pipe` usage that streams
+a long-running CLI should drain every pipe concurrently, not just the one you plan to render.
 
 ### Collection Mutation Crashes
 
@@ -1229,6 +1289,14 @@ Check `~/Documents/Freewrite/` in Finder to verify files are being created.
 - `.onAppear` for initialization
 - `ForEach(entries)` with `Identifiable` for list rendering
 - Conditional views: `if currentVideoURL != nil { VideoPlayerView } else { TextEditor }`
+
+## Possible next (do not start unless asked)
+
+These still fit the blank page. Prefer one slice at a time. Skip cloud sync, other platforms, vendor-per-tab Settings, and publishing.
+
+1. **Notarize** — Developer ID / Apple notarization. Needs the author's signing identity. Do not fake it. (upstream #92)
+
+Public copy of this list lives in `README.md` (“What could come next”). Keep them in sync if you add or drop an item.
 
 ## Summary
 

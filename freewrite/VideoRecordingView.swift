@@ -173,8 +173,10 @@ class CameraManager: NSObject, ObservableObject {
             self.isSettingUpSession = true
             defer { self.isSettingUpSession = false }
 
-            guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
-                  let audioDevice = AVCaptureDevice.default(for: .audio) else {
+            let preferredCamera = UserDefaults.standard.string(forKey: AppSettingsKeys.preferredCamera) ?? ""
+            let preferredMic = UserDefaults.standard.string(forKey: AppSettingsKeys.preferredMicrophone) ?? ""
+            guard let videoDevice = CaptureDevices.videoDevice(preferredID: preferredCamera),
+                  let audioDevice = CaptureDevices.audioDevice(preferredID: preferredMic) else {
                 print("Failed to get camera/audio device")
                 DispatchQueue.main.async {
                     self.notifyCannotRecordIfNeeded()

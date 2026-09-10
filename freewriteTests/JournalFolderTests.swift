@@ -20,6 +20,7 @@ struct JournalFolderTests {
         let root = URL(fileURLWithPath: "/tmp/FreewriteRoot", isDirectory: true)
         #expect(JournalFolder.videosURL(root: root).lastPathComponent == "Videos")
         #expect(JournalFolder.chatsURL(root: root).lastPathComponent == "Chats")
+        #expect(JournalFolder.versionsURL(root: root).lastPathComponent == "Versions")
         #expect(JournalFolder.videosURL(root: root).deletingLastPathComponent() == root)
         #expect(JournalFolder.chatsURL(root: root).deletingLastPathComponent() == root)
     }
@@ -30,6 +31,7 @@ struct JournalFolderTests {
         try JournalFolder.ensureLayout(at: root)
         #expect(FileManager.default.fileExists(atPath: JournalFolder.videosURL(root: root).path))
         #expect(FileManager.default.fileExists(atPath: JournalFolder.chatsURL(root: root).path))
+        #expect(FileManager.default.fileExists(atPath: JournalFolder.versionsURL(root: root).path))
         try? FileManager.default.removeItem(at: root)
     }
 }

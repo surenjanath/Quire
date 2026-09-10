@@ -10,6 +10,46 @@ struct JournalTagsTests {
         #expect(JournalTags.tags(in: "use c# or #1 later") == [])
         #expect(JournalTags.tags(in: "#ok then #ok again") == ["ok"])
     }
+
+    @Test func suggestsFrequentWordsThatAreNotAlreadyTags() {
+        let text = "The river was loud. I walked to the river. Home felt far from the river."
+        #expect(JournalTags.suggestions(in: text, existing: [], limit: 2).first == "river")
+        #expect(!JournalTags.suggestions(in: text, existing: ["river"], limit: 3).contains("river"))
+        #expect(JournalTags.adding("river", to: "hello") == "hello #river")
+        #expect(JournalTags.adding("river", to: "hello #river") == "hello #river")
+    }
+}
+
+struct JournalApplyTests {
+    @Test func stripsTheStockGreetingAndAppliesToThePage() {
+        let reply = "hey, thanks for showing me this. my thoughts:\n\nThe river keeps calling."
+        #expect(JournalApply.cleanedReply(reply) == "The river keeps calling.")
+        #expect(JournalApply.applying(reply, mode: .append, onto: "hello") == "hello\n\nThe river keeps calling.")
+        let stored = "hello\n![shot](Media/a/shot.png)"
+        let replaced = JournalApply.applying("tighter now", mode: .replace, onto: stored)
+        #expect(replaced.contains("tighter now"))
+        #expect(replaced.contains("![shot](Media/a/shot.png)"))
+        #expect(!replaced.contains("hello"))
+        let noted = JournalApply.applying("Keep going. The rest can wait.", mode: .note, onto: "hello")
+        #expect(noted.contains(">> Keep going."))
+        #expect(noted.contains("hello"))
+        #expect(JournalApply.restoring("hello", ifDifferentFrom: "hello\n\nnew") == "hello")
+        #expect(JournalApply.restoring("hello", ifDifferentFrom: "hello") == nil)
+        #expect(JournalApply.restoring(nil, ifDifferentFrom: "x") == nil)
+    }
+}
+
+struct JournalContinuityTests {
+    @Test func offersYesterdaysLastSentenceOnAnEmptyPage() {
+        #expect(JournalContinuity.lastSentence(in: "I walked home. The river was loud.") == "The river was loud.")
+        #expect(JournalContinuity.lastSentence(in: "hello\n![shot](Media/a/shot.png)") == "hello")
+        #expect(JournalContinuity.lastSentence(in: "hi. my name is farza. welcome") == nil)
+        #expect(JournalContinuity.lastSentence(in: "") == nil)
+        #expect(JournalContinuity.shouldOffer(current: ""))
+        #expect(JournalContinuity.shouldOffer(current: "  \n![shot](Media/a/shot.png)"))
+        #expect(!JournalContinuity.shouldOffer(current: "hello"))
+        #expect(JournalContinuity.starting(with: "The river was loud.") == "The river was loud. ")
+    }
 }
 
 struct MermaidFlowTests {

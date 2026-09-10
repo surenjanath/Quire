@@ -20,6 +20,13 @@ struct VoiceNoteTests {
         #expect(VoiceNote.attach(to: next, relativePath: "Media/entry/voice.m4a") == next)
     }
 
+    @Test func recognizesVoiceMarkdownLines() {
+        #expect(VoiceNote.isMarkdownLine("[voice note](Media/a/voice-1.m4a)"))
+        #expect(VoiceNote.isMarkdownLine("  [voice note](Media/a/voice-1.m4a)  "))
+        #expect(!VoiceNote.isMarkdownLine("hello [voice note](Media/a/voice-1.m4a)"))
+        #expect(!VoiceNote.isMarkdownLine("![shot](Media/a/shot.png)"))
+    }
+
     @Test func extractsVoiceRefs() {
         let text = "[voice note](Media/a/voice-1.m4a)\n\nhello\n[voice note](Media/a/voice-2.m4a)"
         #expect(VoiceNote.refs(in: text) == ["Media/a/voice-1.m4a", "Media/a/voice-2.m4a"])

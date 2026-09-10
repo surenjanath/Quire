@@ -36,4 +36,29 @@ enum JournalTags {
         }
         return tags
     }
+
+    static func suggestions(in text: String, existing: [String], limit: Int) -> [String] {
+        let already = Set(existing.map { $0.lowercased() })
+        var counts: [String: Int] = [:]
+        for token in JournalContext.tokens(text) {
+            if already.contains(token) { continue }
+            counts[token, default: 0] += 1
+        }
+        return counts
+            .filter { $0.value >= 2 }
+            .sorted { lhs, rhs in
+                if lhs.value != rhs.value { return lhs.value > rhs.value }
+                return lhs.key < rhs.key
+            }
+            .prefix(limit)
+            .map(\.key)
+    }
+
+    static func adding(_ tag: String, to text: String) -> String {
+        let cleaned = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !cleaned.isEmpty, !tags(in: text).contains(cleaned) else { return text }
+        let visible = MarkdownExtras.visibleBody(text).trimmingCharacters(in: .whitespacesAndNewlines)
+        let next = visible.isEmpty ? "#\(cleaned)" : visible + " #\(cleaned)"
+        return MarkdownExtras.restoringImageLines(visible: next, stored: text)
+    }
 }

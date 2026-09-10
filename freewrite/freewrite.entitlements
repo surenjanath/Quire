@@ -14,5 +14,10 @@
     <true/>
     <key>com.apple.security.personal-information.speech-recognition</key>
     <true/>
+    <key>com.apple.security.temporary-exception.files.absolute-path.read-only</key>
+    <array>
+        <string>/opt/homebrew/bin/</string>
+        <string>/usr/local/bin/</string>
+    </array>
 </dict>
 </plist>

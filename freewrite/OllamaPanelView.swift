@@ -6,7 +6,7 @@
 //  Ollama server. Mirrors the visual language of the History sidebar in
 //  ContentView.swift (fixed width, header, divider, scroll body). Supports
 //  multi-turn follow-up questions via Ollama's /api/chat endpoint, voice
-//  dictation for follow-ups, and quick tone/persona presets.
+//  dictation for follow-ups, tone presets, and putting a reply on the page.
 //
 
 import SwiftUI
@@ -16,17 +16,32 @@ struct OllamaPanelView: View {
     let endpoint: String
     let basePrompt: String
     let sourceText: String
+    let pageText: String
+    let relatedHint: String
+    let journalCatalog: [JournalContext.Entry]
+    let currentFilename: String?
     let colorScheme: ColorScheme
     let canInsert: Bool
-    let onInsert: (String) -> Void
+    let canUndo: Bool
+    let focusPassage: String
+    let tagSuggestions: [String]
+    let onAddTag: (String) -> Void
+    let onApply: (JournalApply.Mode, String) -> Void
+    let onUndo: () -> Void
     let onClose: () -> Void
 
     @AppStorage(AppSettingsKeys.ollamaModel) private var selectedModel: String = ""
+    @AppStorage(AppSettingsKeys.ollamaThink) private var thinkMode: String = OllamaSettings.ThinkMode.off.rawValue
+    @AppStorage(AppSettingsKeys.ollamaTemperature) private var temperature: Double = OllamaSettings.defaultTemperature
+    @AppStorage(AppSettingsKeys.ollamaContext) private var contextTokens: Int = OllamaSettings.defaultContext
+    @AppStorage(AppSettingsKeys.ollamaShowThinking) private var showThinking = true
+    @AppStorage(AppSettingsKeys.customOllamaSystemPrompt) private var customSystemPrompt: String = ""
     @State private var selectedPersona: OllamaPersona = .defaultTone
     @State private var didCopy = false
     @State private var hasStarted = false
     @State private var pullModelName: String = ""
     @State private var followUpText: String = ""
+    @State private var pendingApply: (JournalApply.Mode, String)? = nil
     @State private var suppressModelChangeRestart = false
     @StateObject private var dictation = VoiceDictationService()
 
@@ -44,6 +59,15 @@ struct OllamaPanelView: View {
 
     private var effectivePrompt: String {
         (selectedPersona.promptOverride ?? basePrompt) + "\n\n" + sourceText
+    }
+
+    private var chatOptions: OllamaChatOptions {
+        OllamaChatOptions(
+            think: OllamaSettings.parseThink(thinkMode),
+            temperature: temperature,
+            contextTokens: contextTokens,
+            systemPrompt: OllamaSettings.effectiveSystemPrompt(custom: customSystemPrompt)
+        )
     }
 
     var body: some View {
@@ -75,6 +99,10 @@ struct OllamaPanelView: View {
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
+                Text(relatedHint)
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
             }
 
             Spacer()
@@ -97,6 +125,22 @@ struct OllamaPanelView: View {
                         } else {
                             Text(persona.rawValue)
                         }
+                    }
+                }
+                Divider()
+                Menu("Thinking") {
+                    ForEach(OllamaSettings.ThinkMode.allCases) { mode in
+                        Button(action: { thinkMode = mode.rawValue }) {
+                            if thinkMode == mode.rawValue {
+                                Label(mode.title, systemImage: "checkmark")
+                            } else {
+                                Text(mode.title)
+                            }
+                        }
+                    }
+                    Divider()
+                    Button(showThinking ? "Hide thinking" : "Show thinking") {
+                        showThinking.toggle()
                     }
                 }
                 Divider()
@@ -182,7 +226,18 @@ struct OllamaPanelView: View {
             Text(isUser ? "You" : "Reply")
                 .font(.system(size: 10))
                 .foregroundColor(.secondary)
-            markdownText(isThinking ? "…" : message.content)
+            if !isUser, showThinking, !message.thinking.isEmpty {
+                DisclosureGroup("Thinking") {
+                    Text(message.thinking)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+            }
+            markdownText(isThinking && message.content.isEmpty ? "…" : message.content)
                 .font(.system(size: 13))
                 .italic(isUser)
                 .foregroundColor(isThinking ? .secondary : (isUser ? textColor : .primary))
@@ -334,6 +389,61 @@ struct OllamaPanelView: View {
                 .disabled(followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || service.isStreaming)
             }
 
+            HStack {
+                Menu {
+                    Button("Continue") {
+                        sendCanned(focusPassage.isEmpty
+                            ? "Continue this entry in my voice. Write only the next short paragraph."
+                            : "Continue this highlighted passage in my voice. Write only the next short paragraph.")
+                    }
+                    Button("Tighten") {
+                        sendCanned(focusPassage.isEmpty
+                            ? "Tighten the current page. Keep my meaning. Return only the revised paragraphs, no preamble."
+                            : "Tighten the highlighted passage. Keep my meaning. Return only the revised sentences, no preamble.")
+                    }
+                    Button("Ask") {
+                        sendCanned(focusPassage.isEmpty
+                            ? "Ask me one sharp question about what I wrote. Nothing else."
+                            : "Ask me one sharp question about the highlighted passage. Nothing else.")
+                    }
+                } label: {
+                    Text("Quick prompt")
+                        .font(.system(size: 11))
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .disabled(service.isStreaming || selectedModel.isEmpty)
+
+                Spacer(minLength: 0)
+            }
+            .foregroundColor(textColor)
+
+            if let pending = pendingApply {
+                ApplyCompareView(
+                    mode: pending.0,
+                    before: PageCompare.beforeVisible(pageText),
+                    after: PageCompare.preview(reply: pending.1, mode: pending.0, onto: pageText),
+                    onConfirm: {
+                        onApply(pending.0, pending.1)
+                        pendingApply = nil
+                    },
+                    onCancel: { pendingApply = nil }
+                )
+            }
+
+            if canInsert && !tagSuggestions.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(tagSuggestions, id: \.self) { tag in
+                        Button("#\(tag)") { onAddTag(tag) }
+                            .buttonStyle(.plain)
+                            .help("Add #\(tag) to this page")
+                    }
+                    Spacer(minLength: 0)
+                }
+                .font(.system(size: 11))
+                .foregroundColor(textColor)
+            }
+
             HStack(spacing: 8) {
                 if service.isStreaming {
                     Button("Stop") { service.cancel() }
@@ -350,14 +460,30 @@ struct OllamaPanelView: View {
                 .foregroundColor(textColor)
                 .disabled(lastAssistantMessage == nil)
 
+                if canUndo {
+                    Button("Undo") { onUndo() }
+                        .buttonStyle(.plain)
+                        .foregroundColor(textColor)
+                        .help("Put the page back the way it was")
+                }
+
                 if canInsert {
-                    Button(action: {
-                        if let last = lastAssistantMessage { onInsert(last) }
-                    }) {
-                        Text("Insert")
+                    Button("Insert") { apply(.append) }
+                        .buttonStyle(.plain)
+                        .foregroundColor(textColor)
+                        .disabled(lastAssistantMessage == nil)
+                        .help("Append the reply to this page")
+
+                    Menu {
+                        Button("Replace") { apply(.replace) }
+                            .help("Replace the page text. Pasted images stay.")
+                        Button("Note") { apply(.note) }
+                            .help("Add the first sentence as a >> note")
+                    } label: {
+                        Text("More")
                     }
-                    .buttonStyle(.plain)
-                    .foregroundColor(textColor)
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
                     .disabled(lastAssistantMessage == nil)
                 }
             }
@@ -379,6 +505,11 @@ struct OllamaPanelView: View {
         }
     }
 
+    private func apply(_ mode: JournalApply.Mode) {
+        guard let last = lastAssistantMessage else { return }
+        pendingApply = (mode, last)
+    }
+
     private func copyLastResponse() {
         guard let last = lastAssistantMessage else { return }
         let pasteboard = NSPasteboard.general
@@ -395,7 +526,17 @@ struct OllamaPanelView: View {
         guard !trimmed.isEmpty, !service.isStreaming else { return }
         followUpText = ""
         if dictation.isRecording { dictation.stop() }
-        service.sendFollowUp(endpoint: endpoint, model: selectedModel, text: trimmed)
+        let grounded = JournalContext.enrichFollowUp(
+            trimmed,
+            catalog: journalCatalog,
+            excluding: currentFilename
+        )
+        service.sendFollowUp(endpoint: endpoint, model: selectedModel, text: grounded, options: chatOptions)
+    }
+
+    private func sendCanned(_ text: String) {
+        guard !service.isStreaming, !selectedModel.isEmpty else { return }
+        service.sendFollowUp(endpoint: endpoint, model: selectedModel, text: text, options: chatOptions)
     }
 
     private func refreshModels() async {
@@ -417,7 +558,12 @@ struct OllamaPanelView: View {
     private func start() {
         guard !selectedModel.isEmpty else { return }
         hasStarted = true
-        service.startConversation(endpoint: endpoint, model: selectedModel, initialPrompt: effectivePrompt)
+        service.startConversation(
+            endpoint: endpoint,
+            model: selectedModel,
+            initialPrompt: effectivePrompt,
+            options: chatOptions
+        )
     }
 
     private func restart() {

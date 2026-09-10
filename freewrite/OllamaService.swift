@@ -14,9 +14,29 @@ struct OllamaChatMessage: Identifiable, Equatable, Codable {
         case assistant
     }
 
-    let id = UUID()
+    let id: UUID
     let role: Role
     var content: String
+    var thinking: String
+
+    init(role: Role, content: String, thinking: String = "") {
+        self.id = UUID()
+        self.role = role
+        self.content = content
+        self.thinking = thinking
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, role, content, thinking
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        role = try container.decode(Role.self, forKey: .role)
+        content = try container.decode(String.self, forKey: .content)
+        thinking = try container.decodeIfPresent(String.self, forKey: .thinking) ?? ""
+    }
 }
 
 @MainActor
@@ -45,6 +65,7 @@ final class OllamaService: ObservableObject {
         struct Message: Decodable {
             let role: String?
             let content: String?
+            let thinking: String?
         }
         let message: Message?
         let done: Bool?
@@ -83,18 +104,28 @@ final class OllamaService: ObservableObject {
 
     /// Starts a fresh conversation: clears history and sends `initialPrompt` as the first
     /// user turn.
-    func startConversation(endpoint: String, model: String, initialPrompt: String) {
+    func startConversation(
+        endpoint: String,
+        model: String,
+        initialPrompt: String,
+        options: OllamaChatOptions = .standard
+    ) {
         messages = [OllamaChatMessage(role: .user, content: initialPrompt)]
-        streamAssistantReply(endpoint: endpoint, model: model)
+        streamAssistantReply(endpoint: endpoint, model: model, options: options)
     }
 
     /// Appends a follow-up user message to the existing conversation and streams the
     /// assistant's reply, with the full message history sent as context each time (Ollama's
     /// `/api/chat` is stateless per-request — the client owns the transcript).
-    func sendFollowUp(endpoint: String, model: String, text: String) {
+    func sendFollowUp(
+        endpoint: String,
+        model: String,
+        text: String,
+        options: OllamaChatOptions = .standard
+    ) {
         guard !isStreaming else { return }
         messages.append(OllamaChatMessage(role: .user, content: text))
-        streamAssistantReply(endpoint: endpoint, model: model)
+        streamAssistantReply(endpoint: endpoint, model: model, options: options)
     }
 
     func resetConversation() {
@@ -108,7 +139,11 @@ final class OllamaService: ObservableObject {
         messages = savedMessages
     }
 
-    private func streamAssistantReply(endpoint: String, model: String) {
+    private func streamAssistantReply(
+        endpoint: String,
+        model: String,
+        options: OllamaChatOptions
+    ) {
         cancel()
 
         guard let url = Self.apiURL(endpoint: endpoint, path: "api/chat") else {
@@ -124,7 +159,17 @@ final class OllamaService: ObservableObject {
         isStreaming = true
         let assistantIndex = messages.count
         messages.append(OllamaChatMessage(role: .assistant, content: ""))
-        let payloadMessages = messages.dropLast().map { ["role": $0.role.rawValue, "content": $0.content] }
+        var payloadMessages: [[String: String]] = []
+        if !options.systemPrompt.isEmpty {
+            payloadMessages.append(["role": "system", "content": options.systemPrompt])
+        }
+        payloadMessages += messages.dropLast().map { message in
+            var row = ["role": message.role.rawValue, "content": message.content]
+            if message.role == .assistant, !message.thinking.isEmpty {
+                row["thinking"] = message.thinking
+            }
+            return row
+        }
 
         streamTask = Task { [weak self] in
             guard let self else { return }
@@ -132,11 +177,13 @@ final class OllamaService: ObservableObject {
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.httpBody = try JSONSerialization.data(withJSONObject: [
-                    "model": model,
-                    "messages": payloadMessages,
-                    "stream": true
-                ])
+                request.httpBody = try JSONSerialization.data(withJSONObject: OllamaSettings.chatPayload(
+                    model: model,
+                    messages: payloadMessages,
+                    think: options.think,
+                    temperature: options.temperature,
+                    contextTokens: options.contextTokens
+                ))
 
                 let (bytes, response) = try await URLSession.shared.bytes(for: request)
                 guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
@@ -149,9 +196,13 @@ final class OllamaService: ObservableObject {
                           let chunk = try? JSONDecoder().decode(ChatChunk.self, from: data) else {
                         continue
                     }
-                    if let fragment = chunk.message?.content, !fragment.isEmpty,
-                       assistantIndex < self.messages.count {
-                        self.messages[assistantIndex].content += fragment
+                    if assistantIndex < self.messages.count {
+                        if let thinking = chunk.message?.thinking, !thinking.isEmpty {
+                            self.messages[assistantIndex].thinking += thinking
+                        }
+                        if let fragment = chunk.message?.content, !fragment.isEmpty {
+                            self.messages[assistantIndex].content += fragment
+                        }
                     }
                     if chunk.done == true {
                         break
@@ -160,7 +211,9 @@ final class OllamaService: ObservableObject {
             } catch {
                 if !Task.isCancelled {
                     self.errorMessage = Self.friendlyMessage(for: error)
-                    if assistantIndex < self.messages.count, self.messages[assistantIndex].content.isEmpty {
+                    if assistantIndex < self.messages.count,
+                       self.messages[assistantIndex].content.isEmpty,
+                       self.messages[assistantIndex].thinking.isEmpty {
                         self.messages.remove(at: assistantIndex)
                     }
                 }

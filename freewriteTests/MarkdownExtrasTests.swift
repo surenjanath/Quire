@@ -74,6 +74,24 @@ struct MarkdownExtrasTests {
         #expect(!restored.contains("hello i am me"))
     }
 
+    @Test func hidesVoiceNoteLinksButKeepsTheTranscript() {
+        let stored = """
+        hello river
+        [voice note](Media/a/voice-1.m4a)
+        I said this out loud
+        """
+        let visible = MarkdownExtras.hidingImageLines(stored)
+        #expect(visible.contains("hello river"))
+        #expect(visible.contains("I said this out loud"))
+        #expect(!visible.contains("[voice note]"))
+        #expect(!visible.contains("voice-1.m4a"))
+
+        let restored = MarkdownExtras.restoringImageLines(visible: visible, stored: stored)
+        #expect(restored.contains("[voice note](Media/a/voice-1.m4a)"))
+        #expect(restored.contains("hello river"))
+        #expect(MarkdownExtras.wordCount(stored) == 7)
+    }
+
     @Test func wordCountIgnoresImageJunk() {
         let page = """
         hello i am me

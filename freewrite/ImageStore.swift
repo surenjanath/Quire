@@ -143,4 +143,25 @@ enum ImageStore {
         }
         try data.write(to: dest)
     }
+
+    static func saveFile(
+        data: Data,
+        documentsDirectory: URL,
+        entryFilename: String,
+        prefix: String,
+        ext: String
+    ) throws -> String {
+        let base = (entryFilename as NSString).deletingPathExtension
+        let folder = documentsDirectory
+            .appendingPathComponent("Media")
+            .appendingPathComponent(base)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let name = "\(prefix)-\(formatter.string(from: Date())).\(ext)"
+        let fileURL = folder.appendingPathComponent(name)
+        try data.write(to: fileURL)
+        return "Media/\(base)/\(name)"
+    }
 }

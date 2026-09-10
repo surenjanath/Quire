@@ -86,11 +86,18 @@ struct ContentView: View {
     @State private var entries: [HumanEntry] = []
     @State private var text: String = ""  // Remove initial welcome text since we'll handle it in createNewEntry
     
+    // Settings is an overlay. Window("Settings") and Settings { } both double letters.
+    @State private var showingSettings = false
     @State private var isFullscreen = false
     @AppStorage(AppSettingsKeys.selectedFont) private var selectedFont: String = AppSettingsDefaults.selectedFont
     @State private var currentRandomFont: String = ""
     @AppStorage(AppSettingsKeys.preferredTimerSeconds) private var preferredTimerSeconds: Int = AppSettingsDefaults.timerSeconds
     @AppStorage(AppSettingsKeys.typewriterMode) private var typewriterMode = false
+    @AppStorage(AppSettingsKeys.sentenceFocus) private var sentenceFocus = false
+    @AppStorage(AppSettingsKeys.typewriterSound) private var typewriterSound = false
+    @AppStorage(AppSettingsKeys.roomTone) private var roomToneEnabled = false
+    @AppStorage(AppSettingsKeys.softMarkdown) private var softMarkdown = false
+    @AppStorage(AppSettingsKeys.lockedPageIDs) private var lockedPageIDsStored = ""
     @AppStorage(AppSettingsKeys.advancedImages) private var advancedImages = false
     @AppStorage(AppSettingsKeys.advancedGraph) private var advancedGraph = false
     @AppStorage(AppSettingsKeys.advancedAnnotations) private var advancedAnnotations = false
@@ -100,6 +107,9 @@ struct ContentView: View {
     @State private var imageStripEpoch = 0
     @State private var privacyHidden = false
     @State private var showingFind = false
+    @State private var showingGo = false
+    @State private var goQuery = ""
+    @State private var showingVersions = false
     @State private var findQuery = ""
     @State private var findIndex: Int?
     @State private var textNeedsSave = false
@@ -155,18 +165,26 @@ struct ContentView: View {
     @State private var showingVideoPermissionPopover = false
     @State private var videoPermissionPopoverItems: [VideoPermissionPopoverItem] = []
     @State private var videoPermissionPopoverFallbackMessage: String? = nil
-    @State private var showingSettings = false
     @State private var isJournalUnlocked = true
     @State private var isHoveringSettings = false
     @State private var showingOllamaPanel = false
+    @State private var showingAgentPanel = false
     @State private var showingGraph = false
     @State private var ollamaSourceText: String = ""
+    @State private var ollamaRelatedHint = "This page only"
+    @State private var ollamaCatalog: [JournalContext.Entry] = []
+    @State private var ollamaCurrentFilename: String?
     @State private var ollamaPromptOverride: String? = nil
     @State private var ollamaChatEntryId: UUID? = nil
     @State private var sessionRecapMessage: String? = nil
     @State private var sessionStartedWordCount: Int = 0
     @State private var ollamaPanelEpoch: Int = 0
+    @State private var ollamaFocusPassage: String = ""
+    @State private var applyBefore: String?
     @StateObject private var ollamaService = OllamaService()
+    @StateObject private var agentService = LocalAgentService()
+    @StateObject private var roomTone = QuietRoomTone()
+    @State private var unlockedPageIDs: Set<String> = []
     @StateObject private var editorDictation = VoiceDictationService()
     @StateObject private var voiceNoteRecorder = VoiceNoteRecorder()
     @State private var editorDictationBase: String = ""
@@ -178,6 +196,8 @@ struct ContentView: View {
     @AppStorage(AppSettingsKeys.customChatGPTPrompt) private var customChatGPTPrompt: String = ""
     @AppStorage(AppSettingsKeys.customClaudePrompt) private var customClaudePrompt: String = ""
     @AppStorage(AppSettingsKeys.customOllamaPrompt) private var customOllamaPrompt: String = ""
+    @AppStorage(AppSettingsKeys.claudeCodePath) private var claudeCodePath: String = ""
+    @AppStorage(AppSettingsKeys.codexPath) private var codexPath: String = ""
     @AppStorage(AppSettingsKeys.ollamaEndpoint) private var ollamaEndpoint: String = AppSettingsDefaults.ollamaEndpoint
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     let entryHeight: CGFloat = 40
@@ -224,7 +244,28 @@ struct ContentView: View {
     private func deleteChatHistory(for entry: HumanEntry) {
         let url = chatHistoryURL(for: entry)
         if fileManager.fileExists(atPath: url.path) {
-            try? fileManager.removeItem(at: url)
+            moveToTrash(url)
+        }
+    }
+
+    // Prefers the macOS Trash over a permanent delete, so an accidental delete on a journal
+    // (unlike most in-app actions, there's no in-app Undo for this one) can still be recovered
+    // from Finder. Falls back to a real delete only if Trash itself is unavailable for this path.
+    @discardableResult
+    private func moveToTrash(_ url: URL) -> Bool {
+        guard fileManager.fileExists(atPath: url.path) else { return true }
+        do {
+            try fileManager.trashItem(at: url, resultingItemURL: nil)
+            return true
+        } catch {
+            print("Could not move \(url.lastPathComponent) to Trash (\(error)); deleting instead.")
+            do {
+                try fileManager.removeItem(at: url)
+                return true
+            } catch {
+                print("Error deleting \(url.lastPathComponent): \(error)")
+                return false
+            }
         }
     }
 
@@ -234,18 +275,17 @@ struct ContentView: View {
         return cache
     }()
     
-    // AI prompts: user-editable via Settings (empty custom value falls back to the default)
-    private var effectiveChatGPTPrompt: String {
-        customChatGPTPrompt.isEmpty ? PromptLibrary.defaultChatGPTPrompt : customChatGPTPrompt
+    private var effectiveTonePrompt: String {
+        PromptLibrary.effectiveTone(
+            ollama: customOllamaPrompt,
+            claude: customClaudePrompt,
+            chatGPT: customChatGPTPrompt
+        )
     }
 
-    private var effectiveClaudePrompt: String {
-        customClaudePrompt.isEmpty ? PromptLibrary.defaultClaudePrompt : customClaudePrompt
-    }
-
-    private var effectiveOllamaPrompt: String {
-        customOllamaPrompt.isEmpty ? PromptLibrary.defaultOllamaPrompt : customOllamaPrompt
-    }
+    private var effectiveChatGPTPrompt: String { effectiveTonePrompt }
+    private var effectiveClaudePrompt: String { effectiveTonePrompt }
+    private var effectiveOllamaPrompt: String { effectiveTonePrompt }
     
     // Initialize with saved theme preference if available
     init() {
@@ -438,28 +478,17 @@ struct ContentView: View {
     private func deleteVideoAssets(for videoFilename: String) {
         thumbnailMemoryCache.removeObject(forKey: videoFilename as NSString)
 
+        // Trash the whole managed directory as one unit (video + thumbnail + transcript together)
+        // so restoring from Finder's Trash brings the entry back intact, not as scattered files.
         let managedDirectory = getVideoEntryDirectory(for: videoFilename)
-        let managedVideoURL = managedDirectory.appendingPathComponent(videoFilename)
-        let managedThumbnailURL = managedDirectory.appendingPathComponent("thumbnail.jpg")
-        let managedTranscriptURL = managedDirectory.appendingPathComponent("transcript.md")
-        let flatVideosURL = getVideosDirectory().appendingPathComponent(videoFilename)
-        let rootVideosURL = getDocumentsDirectory().appendingPathComponent(videoFilename)
-
-        let candidateURLs = [managedVideoURL, managedThumbnailURL, managedTranscriptURL, flatVideosURL, rootVideosURL]
-        for url in candidateURLs where fileManager.fileExists(atPath: url.path) {
-            do {
-                try fileManager.removeItem(at: url)
-            } catch {
-                print("Error deleting video asset \(url.lastPathComponent): \(error)")
-            }
+        if fileManager.fileExists(atPath: managedDirectory.path) {
+            moveToTrash(managedDirectory)
         }
 
-        if fileManager.fileExists(atPath: managedDirectory.path) {
-            do {
-                try fileManager.removeItem(at: managedDirectory)
-            } catch {
-                print("Error deleting video entry directory: \(error)")
-            }
+        let flatVideosURL = getVideosDirectory().appendingPathComponent(videoFilename)
+        let rootVideosURL = getDocumentsDirectory().appendingPathComponent(videoFilename)
+        for url in [flatVideosURL, rootVideosURL] where fileManager.fileExists(atPath: url.path) {
+            moveToTrash(url)
         }
     }
 
@@ -991,12 +1020,14 @@ struct ContentView: View {
                     .scrollContentBackground(.hidden)
                     .scrollIndicators(.never)
                     .lineSpacing(lineHeight)
-                    .frame(maxWidth: 650)
+                    .frame(minWidth: 420, maxWidth: 650)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .padding(.top, 40)
                     .id("\(selectedFont)-\(fontSize)")
                     .colorScheme(colorScheme)
                     .onAppear {
                         placeholderText = WritingSpark.prompt(for: Date())
+                        DispatchQueue.main.async { refreshEditorChrome() }
                         // Removed findSubview code which was causing errors
 
                         // Add keyboard monitor for backspace/delete keys
@@ -1022,17 +1053,6 @@ struct ContentView: View {
                             return event
                         }
                     }
-                    .overlay(
-                        ZStack(alignment: .topLeading) {
-                            if text.isEmpty {
-                                Text(placeholderText)
-                                    .font(.custom(selectedFont, size: fontSize))
-                                    .foregroundColor(colorScheme == .light ? .gray.opacity(0.5) : .gray.opacity(0.6))
-                                    .allowsHitTesting(false)
-                                    .offset(x: 5, y: 40)
-                            }
-                        }, alignment: .topLeading
-                    )
                     if advancedAnnotations && (!currentAnnotations.isEmpty || !currentHighlights.isEmpty) {
                         AnnotationRail(
                             notes: currentAnnotations,
@@ -1040,6 +1060,25 @@ struct ContentView: View {
                             colorScheme: colorScheme
                         )
                     }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if let yesterdayLine = yesterdayContinueLine, currentVideoURL == nil {
+                        Button(action: { text = JournalContinuity.starting(with: yesterdayLine) }) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Yesterday")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                                Text(yesterdayLine)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(2)
+                            }
+                            .frame(maxWidth: 650, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Start from yesterday's last sentence")
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
                     }
                     if !currentTags.isEmpty {
                         HStack(spacing: 6) {
@@ -1175,6 +1214,20 @@ struct ContentView: View {
                                             Label("Typewriter", systemImage: "checkmark")
                                         } else {
                                             Text("Typewriter")
+                                        }
+                                    }
+                                    Button(action: { sentenceFocus.toggle() }) {
+                                        if sentenceFocus {
+                                            Label("Focus this sentence", systemImage: "checkmark")
+                                        } else {
+                                            Text("Focus this sentence")
+                                        }
+                                    }
+                                    Button(action: { softMarkdown.toggle() }) {
+                                        if softMarkdown {
+                                            Label("Soft markdown", systemImage: "checkmark")
+                                        } else {
+                                            Text("Soft markdown")
                                         }
                                     }
                                 } label: {
@@ -1535,6 +1588,48 @@ struct ContentView: View {
 
                                         Button(action: {
                                             showingChatMenu = false
+                                            openLocalAgent(.codex)
+                                        }) {
+                                            Text("Codex")
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 8)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .foregroundColor(popoverTextColor)
+                                        .onHover { hovering in
+                                            if hovering {
+                                                NSCursor.pointingHand.push()
+                                            } else {
+                                                NSCursor.pop()
+                                            }
+                                        }
+
+                                        Divider()
+
+                                        Button(action: {
+                                            showingChatMenu = false
+                                            openLocalAgent(.claude)
+                                        }) {
+                                            Text("Claude Code")
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 8)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .foregroundColor(popoverTextColor)
+                                        .onHover { hovering in
+                                            if hovering {
+                                                NSCursor.pointingHand.push()
+                                            } else {
+                                                NSCursor.pop()
+                                            }
+                                        }
+
+                                        Divider()
+
+                                        Button(action: {
+                                            showingChatMenu = false
                                             startOllamaChat()
                                         }) {
                                             Text("Ollama (Offline)")
@@ -1611,70 +1706,6 @@ struct ContentView: View {
                             Text("•")
                                 .foregroundColor(.gray)
 
-                            if !isViewingVideoEntry {
-                                Button(action: {
-                                    backspaceDisabled.toggle()
-                                }) {
-                                    Image(systemName: backspaceDisabled ? "delete.backward.fill" : "delete.backward")
-                                        .foregroundColor(isHoveringBackspaceToggle ? textHoverColor : textColor)
-                                }
-                                .buttonStyle(.plain)
-                                .keyboardShortcut("b", modifiers: [.command, .shift])
-                                .help(backspaceDisabled ? "Backspace locked. ⌘⇧B" : "Lock backspace. ⌘⇧B")
-                                .onHover { hovering in
-                                    isHoveringBackspaceToggle = hovering
-                                    isHoveringBottomNav = hovering
-                                    if hovering {
-                                        NSCursor.pointingHand.push()
-                                    } else {
-                                        NSCursor.pop()
-                                    }
-                                }
-
-                                Menu {
-                                    Button(editorDictation.isRecording ? "Stop Dictation" : "Dictate") {
-                                        toggleEditorDictation()
-                                    }
-                                    Button(voiceNoteRecorder.isRecording ? "Stop Voice Note" : "Voice Note") {
-                                        toggleVoiceNote()
-                                    }
-                                    Button("Paste Image") { insertClipboardImage() }
-                                    Button("Screenshot") { captureScreenshot() }
-                                    Button(privacyHidden ? "Show Page" : "Hide Page") { togglePrivacy() }
-                                } label: {
-                                    Image(systemName: "ellipsis")
-                                        .foregroundColor(textColor)
-                                }
-                                .menuStyle(.borderlessButton)
-                                .help("Dictate, voice, images, privacy")
-                                .onHover { hovering in
-                                    isHoveringBottomNav = hovering
-                                }
-
-                                Text("•")
-                                    .foregroundColor(.gray)
-                            }
-
-                            Button(action: toggleFullscreen) {
-                                Image(systemName: isFullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                                    .foregroundColor(isHoveringFullscreen ? textHoverColor : textColor)
-                            }
-                            .buttonStyle(.plain)
-                            .keyboardShortcut("f", modifiers: [.command, .control])
-                            .help("Toggle fullscreen. ⌃⌘F")
-                            .onHover { hovering in
-                                isHoveringFullscreen = hovering
-                                isHoveringBottomNav = hovering
-                                if hovering {
-                                    NSCursor.pointingHand.push()
-                                } else {
-                                    NSCursor.pop()
-                                }
-                            }
-                            
-                            Text("•")
-                                .foregroundColor(.gray)
-                            
                             Button(action: {
                                 createNewEntry()
                             }) {
@@ -1694,55 +1725,12 @@ struct ContentView: View {
                                     NSCursor.pop()
                                 }
                             }
-                            
-                            Text("•")
-                                .foregroundColor(.gray)
-                            
-                            // Theme toggle button
-                            Button(action: toggleTheme) {
-                                Image(systemName: followSystemAppearance ? "circle.lefthalf.filled" : (colorScheme == .light ? "moon.fill" : "sun.max.fill"))
-                                    .foregroundColor(isHoveringThemeToggle ? textHoverColor : textColor)
-                            }
-                            .buttonStyle(.plain)
-                            .keyboardShortcut("d", modifiers: [.command, .shift])
-                            .help(followSystemAppearance ? "Following the Mac. Click to pick light or dark. ⌘⇧D" : "Toggle light and dark. ⌘⇧D")
-                            .onHover { hovering in
-                                isHoveringThemeToggle = hovering
-                                isHoveringBottomNav = hovering
-                                if hovering {
-                                    NSCursor.pointingHand.push()
-                                } else {
-                                    NSCursor.pop()
-                                }
-                            }
 
                             Text("•")
                                 .foregroundColor(.gray)
 
-                            // Version history button
-                            Button(action: toggleHistorySidebar) {
-                                Image(systemName: "clock.arrow.circlepath")
-                                    .foregroundColor(isHoveringClock ? textHoverColor : textColor)
-                            }
-                            .buttonStyle(.plain)
-                            .keyboardShortcut("h", modifiers: [.command, .shift])
-                            .help("Show or hide history. ⌘⇧H")
-                            .onHover { hovering in
-                                isHoveringClock = hovering
-                                isHoveringBottomNav = hovering
-                                if hovering {
-                                    NSCursor.pointingHand.push()
-                                } else {
-                                    NSCursor.pop()
-                                }
-                            }
-
-                            Text("•")
-                                .foregroundColor(.gray)
-
-                            // Settings button
                             Button(action: {
-                                showingSettings = true
+                                QuireAction.post(QuireAction.openSettings)
                             }) {
                                 Image(systemName: "gearshape")
                                     .foregroundColor(isHoveringSettings ? textHoverColor : textColor)
@@ -1758,6 +1746,65 @@ struct ContentView: View {
                                 } else {
                                     NSCursor.pop()
                                 }
+                            }
+
+                            Text("•")
+                                .foregroundColor(.gray)
+
+                            if !isViewingVideoEntry {
+                                Button(action: {
+                                    backspaceDisabled.toggle()
+                                }) {
+                                    Image(systemName: backspaceDisabled ? "delete.backward.fill" : "delete.backward")
+                                        .foregroundColor(isHoveringBackspaceToggle ? textHoverColor : textColor)
+                                }
+                                .buttonStyle(.plain)
+                                .keyboardShortcut("b", modifiers: [.command, .shift])
+                                .help(backspaceDisabled ? "Backspace locked. ⌘⇧B" : "Lock backspace. ⌘⇧B")
+                                .onHover { hovering in
+                                    isHoveringBackspaceToggle = hovering
+                                    isHoveringBottomNav = hovering
+                                    if hovering {
+                                        NSCursor.pointingHand.push()
+                                    } else {
+                                        NSCursor.pop()
+                                    }
+                                }
+                            }
+
+                            Menu {
+                                Button("Settings…") { QuireAction.post(QuireAction.openSettings) }
+                                Button("New Page") { createNewEntry() }
+                                Button(showingSidebar ? "Hide History" : "History") { toggleHistorySidebar() }
+                                Divider()
+                                if !isViewingVideoEntry {
+                                    Button(backspaceDisabled ? "Unlock Backspace" : "Lock Backspace") {
+                                        backspaceDisabled.toggle()
+                                    }
+                                    Button(editorDictation.isRecording ? "Stop Dictation" : "Dictate") {
+                                        toggleEditorDictation()
+                                    }
+                                    Button(voiceNoteRecorder.isRecording ? "Stop Voice Note" : "Voice Note") {
+                                        toggleVoiceNote()
+                                    }
+                                    Button("Paste Image") { insertClipboardImage() }
+                                    Button("Screenshot") { captureScreenshot() }
+                                    Button(privacyHidden ? "Show Page" : "Hide Page") { togglePrivacy() }
+                                    Button("Earlier Versions") { showingVersions = true }
+                                    Divider()
+                                }
+                                Button(isFullscreen ? "Exit Fullscreen" : "Fullscreen") { toggleFullscreen() }
+                                Button(followSystemAppearance ? "Following the Mac" : (colorScheme == .light ? "Dark Mode" : "Light Mode")) {
+                                    toggleTheme()
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis")
+                                    .foregroundColor(textColor)
+                            }
+                            .menuStyle(.borderlessButton)
+                            .help("New, settings, history, fullscreen, theme")
+                            .onHover { hovering in
+                                isHoveringBottomNav = hovering
                             }
                         }
                         .padding(8)
@@ -1985,6 +2032,13 @@ struct ContentView: View {
                                                 }
                                                 .buttonStyle(.plain)
                                                 .help(isPinned(entry) ? "Unpin entry" : "Pin entry")
+                                                Button(action: { togglePageLock(entry) }) {
+                                                    Image(systemName: isPageLocked(entry) ? "lock.fill" : "lock.open")
+                                                        .font(.system(size: 10))
+                                                        .foregroundColor(isPageLocked(entry) ? .secondary : Color.gray.opacity(0.3))
+                                                }
+                                                .buttonStyle(.plain)
+                                                .help(isPageLocked(entry) ? "Unlock this page" : "Lock this page")
                                                 .onHover { hovering in
                                                     if hovering {
                                                         NSCursor.pointingHand.push()
@@ -2099,11 +2153,30 @@ struct ContentView: View {
                     endpoint: ollamaEndpoint,
                     basePrompt: ollamaPromptOverride ?? effectiveOllamaPrompt,
                     sourceText: ollamaSourceText,
+                    pageText: text,
+                    relatedHint: ollamaRelatedHint,
+                    journalCatalog: ollamaCatalog,
+                    currentFilename: ollamaCurrentFilename,
                     colorScheme: colorScheme,
                     canInsert: !isViewingVideoEntry,
-                    onInsert: { response in
-                        guard !response.isEmpty else { return }
-                        text += (text.isEmpty ? "" : "\n\n") + response
+                    canUndo: JournalApply.restoring(applyBefore, ifDifferentFrom: text) != nil,
+                    focusPassage: ollamaFocusPassage,
+                    tagSuggestions: JournalTags.suggestions(
+                        in: MarkdownExtras.visibleBody(text),
+                        existing: JournalTags.tags(in: text),
+                        limit: 3
+                    ),
+                    onAddTag: { tag in
+                        text = JournalTags.adding(tag, to: text)
+                    },
+                    onApply: { mode, reply in
+                        guard !reply.isEmpty else { return }
+                        applyChatReply(reply, mode: mode)
+                    },
+                    onUndo: {
+                        guard let restored = JournalApply.restoring(applyBefore, ifDifferentFrom: text) else { return }
+                        text = restored
+                        applyBefore = nil
                     },
                     onClose: {
                         ollamaService.cancel()
@@ -2111,6 +2184,33 @@ struct ContentView: View {
                     }
                 )
                 .id(ollamaPanelEpoch)
+            }
+
+            if showingAgentPanel {
+                Divider()
+
+                AgentPanelView(
+                    service: agentService,
+                    pageText: text,
+                    colorScheme: colorScheme,
+                    canInsert: !isViewingVideoEntry,
+                    canUndo: JournalApply.restoring(applyBefore, ifDifferentFrom: text) != nil,
+                    onRun: { job, extra in
+                        runLocalAgent(job: job, extra: extra)
+                    },
+                    onApply: { mode, reply in
+                        applyAgentReply(reply, mode: mode)
+                    },
+                    onUndo: {
+                        guard let restored = JournalApply.restoring(applyBefore, ifDifferentFrom: text) else { return }
+                        text = restored
+                        applyBefore = nil
+                    },
+                    onClose: {
+                        agentService.cancel()
+                        showingAgentPanel = false
+                    }
+                )
             }
 
             if showingGraph && advancedGraph {
@@ -2171,6 +2271,18 @@ struct ContentView: View {
 
                 Button("") { advanceFind() }
                     .keyboardShortcut("g", modifiers: .command)
+
+                Button("") { toggleGo() }
+                    .keyboardShortcut("k", modifiers: .command)
+
+                Button("") { sentenceFocus.toggle() }
+                    .keyboardShortcut("l", modifiers: [.command, .shift])
+
+                Button("") { toggleFullscreen() }
+                    .keyboardShortcut("f", modifiers: [.command, .control])
+
+                Button("") { toggleTheme() }
+                    .keyboardShortcut("d", modifiers: [.command, .shift])
             }
             .hidden()
         )
@@ -2211,6 +2323,7 @@ struct ContentView: View {
             if isJournalUnlocked {
                 loadExistingEntries()
             }
+            roomTone.setEnabled(roomToneEnabled)
         }
         .overlay {
             if !isJournalUnlocked {
@@ -2236,6 +2349,55 @@ struct ContentView: View {
             }
         }
         .overlay {
+            if showingSettings {
+                ZStack {
+                    Color.black.opacity(colorScheme == .light ? 0.16 : 0.5)
+                        .ignoresSafeArea()
+                        .onTapGesture { showingSettings = false }
+                    SettingsView(onClose: { showingSettings = false })
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .shadow(color: Color.black.opacity(0.28), radius: 28, y: 12)
+                }
+            }
+        }
+        .overlay {
+            if showingVersions {
+                ZStack {
+                    Color.black.opacity(0.12)
+                        .ignoresSafeArea()
+                        .onTapGesture { showingVersions = false }
+                    VStack {
+                        VersionsPanelView(
+                            items: currentVersionItems,
+                            onRestore: restoreVersion,
+                            onClose: { showingVersions = false }
+                        )
+                        .padding(.top, 72)
+                        Spacer()
+                    }
+                }
+            }
+        }
+        .overlay {
+            if showingGo {
+                ZStack {
+                    Color.black.opacity(0.12)
+                        .ignoresSafeArea()
+                        .onTapGesture { closeGo() }
+                    VStack {
+                        GoPaletteView(
+                            query: $goQuery,
+                            items: goItems,
+                            onPick: performGo,
+                            onClose: closeGo
+                        )
+                        .padding(.top, 72)
+                        Spacer()
+                    }
+                }
+            }
+        }
+        .overlay {
             if let annotatingImagePath,
                let image = NSImage(contentsOf: documentsDirectory.appendingPathComponent(annotatingImagePath)) {
                 ImageAnnotatorCanvas(
@@ -2258,13 +2420,35 @@ struct ContentView: View {
                 )
             }
         }
-        .sheet(isPresented: $showingSettings) {
-            SettingsView()
+        .onReceive(NotificationCenter.default.publisher(for: QuireAction.openSettings)) { _ in
+            showingSettings = true
         }
-        .onChange(of: showingSettings) { _, showing in
-            if !showing {
-                refreshJournalLocation()
-            }
+        .onReceive(NotificationCenter.default.publisher(for: QuireAction.settingsClosed)) { _ in
+            refreshJournalLocation()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: QuireAction.newPage)) { _ in
+            createNewEntry()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: QuireAction.toggleHistory)) { _ in
+            toggleHistorySidebar()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: QuireAction.toggleChat)) { _ in
+            toggleChatFromMenu()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: QuireAction.exportPDF)) { _ in
+            exportSelectedAsPDF()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: QuireAction.exportJournal)) { _ in
+            exportJournalZip()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: QuireAction.go)) { _ in
+            toggleGo()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: QuireAction.toggleSentenceFocus)) { _ in
+            sentenceFocus.toggle()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: QuireAction.showVersions)) { _ in
+            showingVersions = true
         }
         .onChange(of: showingVideoRecording) { _, isShowing in
             if !isShowing {
@@ -2290,13 +2474,17 @@ struct ContentView: View {
             }
             textNeedsSave = false
         }
-        .onChange(of: text) { _ in
+        .onChange(of: text) { oldValue, newValue in
             lastActivityAt = Date()
             textNeedsSave = true
             adoptBareImagePathsIfNeeded()
             if typewriterMode, currentVideoURL == nil {
                 TypewriterScroll.centerCaretInKeyWindow()
             }
+            if QuietSounds.shouldTick(enabled: typewriterSound, before: oldValue, after: newValue) {
+                QuietSounds.tick()
+            }
+            refreshEditorChrome()
         }
         .onChange(of: findQuery) { _, _ in
             findIndex = nil
@@ -2307,10 +2495,29 @@ struct ContentView: View {
                 colorScheme = newValue
             }
         }
-        .onChange(of: typewriterMode) { _, enabled in
-            if enabled {
-                TypewriterScroll.centerCaretInKeyWindow()
-            }
+        .onChange(of: typewriterMode) { _, _ in
+            refreshEditorChrome()
+        }
+        .onChange(of: sentenceFocus) { _, _ in
+            refreshEditorChrome()
+        }
+        .onChange(of: softMarkdown) { _, _ in
+            refreshEditorChrome()
+        }
+        .onChange(of: colorScheme) { _, _ in
+            refreshEditorChrome()
+        }
+        .onChange(of: selectedFont) { _, _ in
+            DispatchQueue.main.async { refreshEditorChrome() }
+        }
+        .onChange(of: storedFontSize) { _, _ in
+            DispatchQueue.main.async { refreshEditorChrome() }
+        }
+        .onChange(of: roomToneEnabled) { _, enabled in
+            roomTone.setEnabled(enabled)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSTextView.didChangeSelectionNotification)) { _ in
+            refreshEditorChrome()
         }
         .onChange(of: editorDictation.transcript) { _, newValue in
             guard editorDictation.isRecording, currentVideoURL == nil else { return }
@@ -2538,7 +2745,7 @@ struct ContentView: View {
             idleFor: Date().timeIntervalSince(lastActivityAt),
             timerRunning: timerIsRunning,
             hovering: isHoveringBottomNav,
-            forceVisible: showingSidebar || showingFind || showingSettings || showingOllamaPanel || showingVideoRecording || privacyHidden
+            forceVisible: showingSidebar || showingFind || showingGo || showingVersions || showingSettings || showingOllamaPanel || showingAgentPanel || showingVideoRecording || privacyHidden
         )
         let target: Double = visible ? 1.0 : 0.0
         guard bottomNavOpacity != target else { return }
@@ -2550,6 +2757,109 @@ struct ContentView: View {
     private func beginFind() {
         guard currentVideoURL == nil else { return }
         showingFind = true
+    }
+
+    private var goItems: [CommandGo.Item] {
+        let commands = CommandGo.commands(matching: goQuery)
+        let needle = goQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return commands }
+        let pages = entries.filter { matchesSearch($0, query: needle) }.prefix(8).map { entry in
+            let title = entry.previewText.trimmingCharacters(in: .whitespacesAndNewlines)
+            return CommandGo.pageItem(
+                id: entry.filename,
+                title: title.isEmpty ? entry.date : title,
+                hint: entry.date
+            )
+        }
+        return commands + pages
+    }
+
+    private func toggleGo() {
+        if showingGo {
+            closeGo()
+        } else {
+            goQuery = ""
+            showingGo = true
+        }
+    }
+
+    private func closeGo() {
+        showingGo = false
+        goQuery = ""
+    }
+
+    private func performGo(_ item: CommandGo.Item) {
+        closeGo()
+        if item.kind == .page {
+            if let entry = entries.first(where: { $0.filename == item.id }) {
+                selectEntry(entry)
+            }
+            return
+        }
+        switch item.id {
+        case "new":
+            createNewEntry()
+        case "history":
+            toggleHistorySidebar()
+        case "find":
+            beginFind()
+        case "chat":
+            toggleChatFromMenu()
+        case "claude-code":
+            openLocalAgent(.claude)
+        case "codex":
+            openLocalAgent(.codex)
+        case "weekly":
+            startWeeklyReview()
+        case "focus":
+            sentenceFocus.toggle()
+        case "typewriter":
+            typewriterMode.toggle()
+        case "privacy":
+            togglePrivacy()
+        case "random":
+            openRandomPage()
+        case "versions":
+            showingVersions = true
+        case "export":
+            exportSelectedAsPDF()
+        case "export-journal":
+            exportJournalZip()
+        case "settings":
+            QuireAction.post(QuireAction.openSettings)
+        default:
+            break
+        }
+    }
+
+    private func openRandomPage() {
+        let pool = entries.filter { $0.id != selectedEntryId }
+        guard let entry = pool.randomElement() else {
+            showTransientMessage("Only one page so far")
+            return
+        }
+        selectEntry(entry)
+    }
+
+    private func refreshEditorChrome() {
+        guard currentVideoURL == nil else { return }
+        let primary = colorScheme == .light
+            ? NSColor(red: 0.20, green: 0.20, blue: 0.20, alpha: 1)
+            : NSColor(red: 0.90, green: 0.90, blue: 0.90, alpha: 1)
+        let placeholderColor = colorScheme == .light
+            ? NSColor.gray.withAlphaComponent(0.45)
+            : NSColor.gray.withAlphaComponent(0.55)
+        EditorPlaceholder.apply(
+            placeholderText,
+            fontName: selectedFont,
+            size: fontSize,
+            color: placeholderColor
+        )
+        SentenceFocus.apply(enabled: sentenceFocus, primary: primary, dim: primary.withAlphaComponent(0.28))
+        SoftMarkdown.apply(enabled: softMarkdown, dim: primary.withAlphaComponent(0.35))
+        if let textView = CompositionGuard.firstTextView() {
+            TypewriterScroll.apply(to: textView, enabled: typewriterMode)
+        }
     }
 
     private var findRanges: [NSRange] {
@@ -2576,6 +2886,8 @@ struct ContentView: View {
         withAnimation(.easeInOut(duration: 0.2)) {
             if !showingSidebar {
                 showingOllamaPanel = false
+                showingAgentPanel = false
+                agentService.cancel()
                 showingGraph = false
             }
             showingSidebar.toggle()
@@ -2649,7 +2961,7 @@ struct ContentView: View {
     }
 
     private var currentImageRefs: [String] {
-        MarkdownExtras.imageRefs(in: text)
+        MarkdownExtras.readableImageRefs(in: text, documentsDirectory: documentsDirectory)
     }
 
     private var currentVoiceRefs: [String] {
@@ -2704,6 +3016,8 @@ struct ContentView: View {
         if showingGraph {
             showingSidebar = false
             showingOllamaPanel = false
+            showingAgentPanel = false
+            agentService.cancel()
         }
     }
 
@@ -2761,6 +3075,7 @@ struct ContentView: View {
         let newEntry = HumanEntry.createNew()
         entries.insert(newEntry, at: 0) // Add to the beginning
         selectedEntryId = newEntry.id
+        applyBefore = nil
         currentVideoURL = nil
         selectedVideoHasTranscript = false
         didCopyTranscript = false
@@ -2782,6 +3097,7 @@ struct ContentView: View {
             text = ""
             // Randomize placeholder text for new entry
             placeholderText = WritingSpark.prompt(for: Date())
+            DispatchQueue.main.async { refreshEditorChrome() }
             // Save the empty entry
             saveEntry(entry: newEntry)
         }
@@ -2794,6 +3110,106 @@ struct ContentView: View {
         }
     }
     
+    private func openLocalAgent(_ backend: LocalAgent.Backend) {
+        ollamaService.cancel()
+        showingOllamaPanel = false
+        showingSidebar = false
+        showingGraph = false
+        agentService.backend = backend
+        agentService.reply = ""
+        agentService.errorMessage = nil
+        showingAgentPanel = true
+        if !currentChatSourceText().trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            runLocalAgent(job: .reflect, extra: nil)
+        }
+    }
+
+    private func runLocalAgent(job: LocalAgent.Job, extra: String?) {
+        let backend = agentService.backend
+        let override = backend == .claude ? claudeCodePath : codexPath
+        guard let executable = LocalAgent.resolvedPath(for: backend, override: override) else {
+            agentService.errorMessage = "Choose the \(backend.title) program in Settings → Chat."
+            showingAgentPanel = true
+            return
+        }
+        agentService.job = job
+        showingAgentPanel = true
+        agentService.start(
+            executable: executable,
+            backend: backend,
+            packet: LocalAgent.packet(
+                job: job,
+                tone: effectiveTonePrompt,
+                entry: currentChatSourceText(),
+                extra: extra
+            )
+        )
+    }
+
+    private var currentVersionItems: [PageVersions.Item] {
+        guard let entry = entries.first(where: { $0.id == selectedEntryId }) else { return [] }
+        return PageVersions.list(root: documentsDirectory, entryFilename: entry.filename)
+    }
+
+    private func applyChatReply(_ reply: String, mode: JournalApply.Mode) {
+        let next = JournalApply.applying(reply, mode: mode, onto: text)
+        snapshotThenApply(next)
+    }
+
+    private func snapshotThenApply(_ next: String, from original: String? = nil) {
+        let current = original ?? text
+        if let entry = entries.first(where: { $0.id == selectedEntryId }),
+           PageVersions.shouldSnapshot(current: current, next: next) {
+            _ = try? PageVersions.write(
+                current: current,
+                root: documentsDirectory,
+                entryFilename: entry.filename
+            )
+        }
+        applyBefore = current
+        text = next
+    }
+
+    private func restoreVersion(_ item: PageVersions.Item) {
+        guard let body = PageVersions.read(item.url) else {
+            showTransientMessage("Could not open that draft")
+            return
+        }
+        let next = PageVersions.restore(body, onto: text)
+        snapshotThenApply(next)
+        showingVersions = false
+        showTransientMessage("Restored earlier draft")
+    }
+
+    private func applyAgentReply(_ reply: String, mode: JournalApply.Mode = .append) {
+        guard !reply.isEmpty else {
+            showTransientMessage("No reply")
+            return
+        }
+        let before = text
+        let body = LocalAgent.strippingSVGFences(JournalApply.cleanedReply(reply))
+        if let entry = entries.first(where: { $0.id == selectedEntryId }) {
+            for svg in LocalAgent.svgBlocks(in: reply) {
+                if let relative = try? ImageStore.saveFile(
+                    data: Data(svg.utf8),
+                    documentsDirectory: documentsDirectory,
+                    entryFilename: entry.filename,
+                    prefix: "diagram",
+                    ext: "svg"
+                ) {
+                    text = MarkdownExtras.insertImage(into: text, relativePath: relative, alt: "diagram")
+                }
+            }
+        }
+        if !body.isEmpty {
+            snapshotThenApply(JournalApply.applying(body, mode: mode, onto: text), from: before)
+        }
+        if !MarkdownExtras.mermaidBlocks(in: reply).isEmpty {
+            advancedMermaid = true
+        }
+        showTransientMessage("On the page")
+    }
+
     private func openClaude() {
         let fullText = effectiveClaudePrompt + "\n\n" + currentChatSourceText()
         if let url = ChatURL.claude(fullText) {
@@ -2820,9 +3236,44 @@ struct ContentView: View {
         return true
     }
 
+    private func toggleChatFromMenu() {
+        if showingOllamaPanel {
+            ollamaService.cancel()
+            showingOllamaPanel = false
+            return
+        }
+        guard canOfferOllamaChat() else {
+            showTransientMessage("Write a little more first")
+            return
+        }
+        startOllamaChat()
+    }
+
+    private func exportSelectedAsPDF() {
+        guard let selectedEntryId,
+              let entry = entries.first(where: { $0.id == selectedEntryId }) else {
+            showTransientMessage("Nothing to export")
+            return
+        }
+        exportEntryAsPDF(entry: entry)
+    }
+
     private var onThisDayHighlight: HumanEntry? {
         let names = JournalInsights.onThisDay(filenames: entries.map(\.filename)).map(\.filename)
         return names.compactMap { name in entries.first(where: { $0.filename == name }) }.first
+    }
+
+    private var yesterdayContinueLine: String? {
+        guard JournalContinuity.shouldOffer(current: text) else { return nil }
+        guard let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date()) else { return nil }
+        guard let item = JournalInsights.latestEntry(on: yesterday, filenames: entries.map(\.filename)) else {
+            return nil
+        }
+        let raw = (try? String(
+            contentsOf: documentsDirectory.appendingPathComponent(item.filename),
+            encoding: .utf8
+        )) ?? ""
+        return JournalContinuity.lastSentence(in: raw)
     }
 
     private func flushSaveIfNeeded() {
@@ -2837,11 +3288,62 @@ struct ContentView: View {
 
     private func selectEntry(_ entry: HumanEntry) {
         if selectedEntryId == entry.id { return }
+        let key = entry.id.uuidString
+        if PageLock.shouldChallenge(
+            locked: PageLock.parse(lockedPageIDsStored).contains(key),
+            alreadyUnlocked: unlockedPageIDs.contains(key)
+        ) {
+            Task {
+                if await JournalLock.authenticate(reason: "Open this page") {
+                    unlockedPageIDs.insert(key)
+                    finishSelecting(entry)
+                }
+            }
+            return
+        }
+        finishSelecting(entry)
+    }
+
+    private func finishSelecting(_ entry: HumanEntry) {
         finishVoiceNoteIfRecording()
         flushSaveIfNeeded()
         guard let target = entries.first(where: { $0.id == entry.id }) else { return }
         selectedEntryId = target.id
+        applyBefore = nil
         loadEntry(entry: target)
+    }
+
+    private func isPageLocked(_ entry: HumanEntry) -> Bool {
+        PageLock.parse(lockedPageIDsStored).contains(entry.id.uuidString)
+    }
+
+    private func togglePageLock(_ entry: HumanEntry) {
+        let key = entry.id.uuidString
+        if isPageLocked(entry) {
+            Task {
+                if await JournalLock.authenticate(reason: "Unlock this page") {
+                    lockedPageIDsStored = PageLock.serialize(PageLock.toggling(key, in: PageLock.parse(lockedPageIDsStored)))
+                    unlockedPageIDs.insert(key)
+                }
+            }
+        } else {
+            lockedPageIDsStored = PageLock.serialize(PageLock.toggling(key, in: PageLock.parse(lockedPageIDsStored)))
+            unlockedPageIDs.remove(key)
+        }
+    }
+
+    private func exportJournalZip() {
+        let panel = NSSavePanel()
+        panel.title = "Export Journal"
+        panel.nameFieldStringValue = "Quire-journal.zip"
+        panel.allowedContentTypes = [.zip]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try JournalExport.writeZip(from: documentsDirectory, to: url)
+            showTransientMessage("Journal exported")
+        } catch {
+            showTransientMessage("Could not export the journal")
+        }
     }
 
     private func presentSessionRecap() {
@@ -2900,17 +3402,32 @@ struct ContentView: View {
 
         ollamaPromptOverride = PromptLibrary.defaultWeeklyReviewPrompt
         ollamaSourceText = compiled
+        ollamaRelatedHint = "Last seven days"
+        ollamaFocusPassage = ""
+        ollamaCatalog = journalCatalog()
+        ollamaCurrentFilename = nil
         ollamaChatEntryId = nil
         ollamaService.resetConversation()
         ollamaPanelEpoch += 1
         showingOllamaPanel = true
         showingSidebar = false
         showingGraph = false
+        showingAgentPanel = false
+        agentService.cancel()
     }
 
     private func startOllamaChat() {
         ollamaPromptOverride = nil
-        ollamaSourceText = currentChatSourceText()
+        let current = currentChatSourceText()
+        let focus = JournalContext.focusPassage(selected: PageFind.selectedText() ?? "", in: text)
+        let filename = entries.first(where: { $0.id == selectedEntryId })?.filename
+        let catalog = journalCatalog()
+        let related = JournalContext.related(to: focus ?? current, in: catalog, excluding: filename)
+        ollamaSourceText = JournalContext.userPacket(current: current, related: related, focus: focus)
+        ollamaRelatedHint = JournalContext.hint(relatedCount: related.count, focused: focus != nil)
+        ollamaFocusPassage = focus ?? ""
+        ollamaCatalog = catalog
+        ollamaCurrentFilename = filename
 
         if let selectedEntryId, let currentEntry = entries.first(where: { $0.id == selectedEntryId }) {
             ollamaChatEntryId = currentEntry.id
@@ -2927,6 +3444,28 @@ struct ContentView: View {
         showingOllamaPanel = true
         showingSidebar = false
         showingGraph = false
+        showingAgentPanel = false
+        agentService.cancel()
+    }
+
+    private func journalCatalog() -> [JournalContext.Entry] {
+        entries.compactMap { entry in
+            let raw: String
+            if let video = resolvedVideoFilename(for: entry),
+               let transcript = loadTranscriptText(for: video) {
+                raw = transcript
+            } else {
+                raw = (try? String(
+                    contentsOf: documentsDirectory.appendingPathComponent(entry.filename),
+                    encoding: .utf8
+                )) ?? ""
+            }
+            let body = MarkdownExtras.visibleBody(raw)
+            guard !JournalInsights.isGuideOrEmpty(body) else { return nil }
+            let dateLabel = JournalInsights.parseTimestamp(from: entry.filename)
+                .map { JournalInsights.displayDate($0) } ?? entry.date
+            return JournalContext.Entry(filename: entry.filename, dateLabel: dateLabel, body: body)
+        }
     }
 
     private func currentChatSourceText() -> String {
@@ -3050,44 +3589,40 @@ struct ContentView: View {
     }
 
     private func deleteEntry(entry: HumanEntry) {
-        // Delete the file from the filesystem
+        // Move the file to Trash (not a permanent delete — see moveToTrash) from the filesystem
         let documentsDirectory = getDocumentsDirectory()
         let fileURL = documentsDirectory.appendingPathComponent(entry.filename)
 
-        do {
-            try fileManager.removeItem(at: fileURL)
-            print("Successfully deleted file: \(entry.filename)")
+        guard moveToTrash(fileURL) else { return }
+        print("Successfully removed file: \(entry.filename)")
 
-            // If this is a video entry, also delete the video file
-            if let videoFilename = resolvedVideoFilename(for: entry) {
-                deleteVideoAssets(for: videoFilename)
-                print("Successfully deleted video assets: \(videoFilename)")
-            }
+        // If this is a video entry, also remove the video file
+        if let videoFilename = resolvedVideoFilename(for: entry) {
+            deleteVideoAssets(for: videoFilename)
+            print("Successfully removed video assets: \(videoFilename)")
+        }
 
-            if pinnedEntryIDs.remove(entry.id.uuidString) != nil {
-                UserDefaults.standard.set(Array(pinnedEntryIDs), forKey: "pinnedEntryIDs")
-            }
+        if pinnedEntryIDs.remove(entry.id.uuidString) != nil {
+            UserDefaults.standard.set(Array(pinnedEntryIDs), forKey: "pinnedEntryIDs")
+        }
 
-            deleteChatHistory(for: entry)
+        deleteChatHistory(for: entry)
 
-            // Remove the entry from the entries array
-            if let index = entries.firstIndex(where: { $0.id == entry.id }) {
-                entries.remove(at: index)
-                historyDebug("DELETE ENTRY removed \(debugEntrySummary(entry))")
-                logEntriesOrder("deleteEntry")
+        // Remove the entry from the entries array
+        if let index = entries.firstIndex(where: { $0.id == entry.id }) {
+            entries.remove(at: index)
+            historyDebug("DELETE ENTRY removed \(debugEntrySummary(entry))")
+            logEntriesOrder("deleteEntry")
 
-                // If the deleted entry was selected, select the first entry or create a new one
-                if selectedEntryId == entry.id {
-                    if let firstEntry = entries.first {
-                        selectedEntryId = firstEntry.id
-                        loadEntry(entry: firstEntry)
-                    } else {
-                        createNewEntry()
-                    }
+            // If the deleted entry was selected, select the first entry or create a new one
+            if selectedEntryId == entry.id {
+                if let firstEntry = entries.first {
+                    selectedEntryId = firstEntry.id
+                    loadEntry(entry: firstEntry)
+                } else {
+                    createNewEntry()
                 }
             }
-        } catch {
-            print("Error deleting file: \(error)")
         }
     }
     
