@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds Freewrite.app without requiring the full Xcode IDE.
+# Builds Quire.app without requiring the full Xcode IDE.
 #
 # Uses the Swift toolchain + macOS SDK bundled with Xcode Command Line Tools
 # (swiftc, codesign) to compile the sources and hand-assemble an .app bundle,
@@ -161,9 +161,6 @@ mkdir -p "$DIST"
 cp -R "$APP" "$DIST/Quire.app"
 cp "$ROOT/freewrite/Resources/How to install.txt" "$DIST/How to install.txt"
 ditto -c -k --norsrc --keepParent "$DIST" "$BUILD_DIR/Quire.zip"
-# Old path some docs still mention
-rm -rf "$BUILD_DIR/Freewrite.app"
-cp -R "$APP" "$BUILD_DIR/Freewrite.app"
 
 echo "Built: $APP"
 echo "Zip:   $BUILD_DIR/Quire.zip"
