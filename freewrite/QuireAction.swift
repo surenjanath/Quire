@@ -23,7 +23,7 @@ enum QuireAction {
         "A daily spark on the empty page",
         "History, search, pins, streak, and a month calendar",
         "Go (⌘K) to jump to a past page, run a command, or ask your journal a question",
-        "Voice notes, dictation, and video journal",
+        "Voice notes, dictation, video journal, and Read Aloud to hear the page back",
         "Optional Chat: ChatGPT, Claude, Ollama, Claude Code, Codex — grounded in your own pages",
         "Earlier versions before Chat changes the page",
         "Import a page from another app, export one as PDF, or the whole journal as a zip",

@@ -87,6 +87,7 @@ Everything lives on your Mac:
 - Export the whole journal as a zip (markdown, Media, Versions — not Videos or Chats)
 - Video journal — pick camera and microphone in Settings → Writing
 - Voice notes (audio + live transcript)
+- Read Aloud — the page read back to you, on-device (⌘⇧V)
 - Editor and chat dictation
 
 **Settings → Writing (off by default)**
@@ -128,6 +129,7 @@ The first entry you ever see is still Farza’s original freewriting guide. Afte
 | ⌘⇧B | Backspace lock |
 | ⌘⇧M | Dictate |
 | ⌘⇧A | Voice note |
+| ⌘⇧V | Read Aloud |
 | ⌘⇧O | Ollama chat |
 | ⌘⇧R | Weekly review |
 | ⌘⇧L | Focus this sentence |

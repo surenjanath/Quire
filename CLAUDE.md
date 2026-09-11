@@ -1024,10 +1024,15 @@ mid-session without opening Settings; `effectivePrompt` composes
 | Cmd+K | Go: commands and journal search |
 | Cmd+Shift+L | Focus this sentence |
 | Cmd+Shift+Y | Toggle typewriter scroll |
+| Cmd+Shift+V | Toggle Read Aloud (speak the page back, on-device) |
 
-Cmd+Shift+O and Cmd+Shift+T are hidden buttons on the root view. The others are attached to the
-matching bottom-nav controls. Cmd+Shift+O is still gated by the same "guide text" / "write ≥350
-chars first" checks the Chat popover uses.
+Cmd+Shift+O, T, R, Y, D, M, A, and V are hidden `Button("") { ... }.keyboardShortcut(...)` views in
+a `.hidden()` group on the root view (search `finishVoiceNoteIfRecording` context for the group).
+Cmd+Shift+M and Cmd+Shift+A were listed here for a long time without actually being wired to
+anything — a real bug, not just a documentation gap, caught while adding Read Aloud. The rest
+(Cmd+N, Cmd+,, Ctrl+Cmd+F, Cmd+Shift+H/B/L/K/F/G) are attached to their matching bottom-nav
+controls or macOS `.commands` menu items. Cmd+Shift+O is still gated by the same "guide text" /
+"write ≥350 chars first" checks the Chat popover uses.
 
 ### Editor Dictation
 

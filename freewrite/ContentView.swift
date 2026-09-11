@@ -191,6 +191,7 @@ struct ContentView: View {
     @State private var unlockedPageIDs: Set<String> = []
     @StateObject private var editorDictation = VoiceDictationService()
     @StateObject private var voiceNoteRecorder = VoiceNoteRecorder()
+    @StateObject private var pageNarrator = PageNarrator()
     @State private var editorDictationBase: String = ""
     @State private var isHoveringDictate = false
     @State private var isHoveringVoiceNote = false
@@ -1270,16 +1271,16 @@ struct ContentView: View {
                             if !isViewingVideoEntry, let recordingIndicatorLabel {
                                 HStack(spacing: 5) {
                                     Circle()
-                                        .fill(Color.red)
+                                        .fill(recordingIndicatorColor)
                                         .frame(width: 6, height: 6)
                                         .opacity(recordingPulse ? 1.0 : 0.35)
                                         .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: recordingPulse)
                                         .onAppear { recordingPulse = true }
                                         .onDisappear { recordingPulse = false }
                                     Text(recordingIndicatorLabel)
-                                        .foregroundColor(.red)
+                                        .foregroundColor(recordingIndicatorColor)
                                 }
-                                .help("\(recordingIndicatorLabel)… click Stop in the ⋯ menu, or press ⌘⇧M / ⌘⇧A")
+                                .help("\(recordingIndicatorLabel)… click Stop in the ⋯ menu, or press ⌘⇧M / ⌘⇧A / ⌘⇧V")
 
                                 Text("•")
                                     .foregroundColor(.gray)
@@ -1816,6 +1817,9 @@ struct ContentView: View {
                                     Button(voiceNoteRecorder.isRecording ? "Stop Voice Note" : "Voice Note") {
                                         toggleVoiceNote()
                                     }
+                                    Button(pageNarrator.isSpeaking ? "Stop Reading" : "Read Aloud") {
+                                        toggleReadAloud()
+                                    }
                                     Button("Paste Image") { insertClipboardImage() }
                                     Button("Import Entry\u{2026}") { importEntry() }
                                     Button("Screenshot") { captureScreenshot() }
@@ -2314,6 +2318,16 @@ struct ContentView: View {
 
                 Button("") { toggleTheme() }
                     .keyboardShortcut("d", modifiers: [.command, .shift])
+
+                // Documented in the README/About shortcuts list but never actually wired up.
+                Button("") { toggleEditorDictation() }
+                    .keyboardShortcut("m", modifiers: [.command, .shift])
+
+                Button("") { toggleVoiceNote() }
+                    .keyboardShortcut("a", modifiers: [.command, .shift])
+
+                Button("") { toggleReadAloud() }
+                    .keyboardShortcut("v", modifiers: [.command, .shift])
             }
             .hidden()
         )
@@ -2649,13 +2663,22 @@ struct ContentView: View {
         MarkdownExtras.wordCount(text)
     }
 
-    // Dictate and Voice Note both live only in the ⋯ menu, which closes the moment you pick one —
-    // without this, starting either leaves no sign anywhere that a mic is live. Voice Note also
-    // turns dictation on underneath it (see toggleVoiceNote), so it takes label priority.
+    // Dictate, Voice Note, and Read Aloud all live only in the ⋯ menu, which closes the moment you
+    // pick one — without this, starting any of them leaves no sign anywhere that a mic (or the
+    // speaker) is live. Voice Note also turns dictation on underneath it (see toggleVoiceNote), so
+    // it takes label priority over plain dictation.
     private var recordingIndicatorLabel: String? {
         if voiceNoteRecorder.isRecording { return "Recording voice note" }
         if editorDictation.isRecording { return "Dictating" }
+        if pageNarrator.isSpeaking { return "Reading aloud" }
         return nil
+    }
+
+    // Reading aloud is playback, not capture — a red "recording" dot would misdescribe it.
+    private var recordingIndicatorColor: Color {
+        pageNarrator.isSpeaking && !voiceNoteRecorder.isRecording && !editorDictation.isRecording
+            ? .blue
+            : .red
     }
 
     private var writingStreak: Int {
@@ -3037,7 +3060,16 @@ struct ContentView: View {
         }
     }
 
+    private func toggleReadAloud() {
+        guard currentVideoURL == nil else { return }
+        pageNarrator.toggle(MarkdownExtras.visibleBody(text))
+    }
+
+    // Despite the name, this is the one place called at every "leaving this page" transition
+    // (switching entries, new entry, video recorder, quitting), so it's also where any ambient
+    // audio — input (dictation, voice note) or output (Read Aloud) — gets stopped.
     private func finishVoiceNoteIfRecording() {
+        pageNarrator.stop()
         let audioURL = voiceNoteRecorder.isRecording ? voiceNoteRecorder.stop() : nil
         stopEditorDictation()
         guard let audioURL,

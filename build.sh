@@ -77,6 +77,7 @@ cp "$ROOT/freewrite/freewriteApp.swift" \
    "$ROOT/freewrite/AgentPanelView.swift" \
    "$ROOT/freewrite/SettingsView.swift" \
    "$ROOT/freewrite/VoiceDictationService.swift" \
+   "$ROOT/freewrite/PageNarrator.swift" \
    "$SRC_DIR/"
 python3 - "$SRC_DIR/ContentView.swift" <<'PY'
 import sys
@@ -100,7 +101,7 @@ swiftc -O \
     -target arm64-apple-macos14.0 \
     -parse-as-library \
     "$SRC_DIR/freewriteApp.swift" "$SRC_DIR/ContentView.swift" "$SRC_DIR/VideoPlayerView.swift" "$SRC_DIR/VideoRecordingView.swift" \
-    "$SRC_DIR/Prompts.swift" "$SRC_DIR/AppSettingsKeys.swift" "$SRC_DIR/WritingPreferences.swift" "$SRC_DIR/EditorDictation.swift" "$SRC_DIR/JournalInsights.swift" "$SRC_DIR/WritingSpark.swift" "$SRC_DIR/VoiceNote.swift" "$SRC_DIR/JournalFolder.swift" "$SRC_DIR/PageVersions.swift" "$SRC_DIR/PageCompare.swift" "$SRC_DIR/JournalExport.swift" "$SRC_DIR/CaptureDevices.swift" "$SRC_DIR/PageLock.swift" "$SRC_DIR/QuietSounds.swift" "$SRC_DIR/SoftMarkdown.swift" "$SRC_DIR/JournalLock.swift" "$SRC_DIR/JournalChrome.swift" "$SRC_DIR/TypewriterScroll.swift" "$SRC_DIR/MarkdownExtras.swift" "$SRC_DIR/JournalTags.swift" "$SRC_DIR/JournalApply.swift" "$SRC_DIR/JournalContinuity.swift" "$SRC_DIR/MermaidFlow.swift" "$SRC_DIR/ImageAnnotator.swift" "$SRC_DIR/WritingGoal.swift" "$SRC_DIR/QuietTools.swift" "$SRC_DIR/WritingFocus.swift" "$SRC_DIR/CommandGo.swift" "$SRC_DIR/JournalContext.swift" "$SRC_DIR/JournalStats.swift" "$SRC_DIR/JournalImport.swift" "$SRC_DIR/OllamaSettings.swift" "$SRC_DIR/QuireAction.swift" "$SRC_DIR/LocalAgent.swift" "$SRC_DIR/ImageStore.swift" "$SRC_DIR/AdvancedPanels.swift" "$SRC_DIR/OllamaService.swift" "$SRC_DIR/OllamaPanelView.swift" "$SRC_DIR/AgentPanelView.swift" "$SRC_DIR/SettingsView.swift" "$SRC_DIR/VoiceDictationService.swift" \
+    "$SRC_DIR/Prompts.swift" "$SRC_DIR/AppSettingsKeys.swift" "$SRC_DIR/WritingPreferences.swift" "$SRC_DIR/EditorDictation.swift" "$SRC_DIR/JournalInsights.swift" "$SRC_DIR/WritingSpark.swift" "$SRC_DIR/VoiceNote.swift" "$SRC_DIR/JournalFolder.swift" "$SRC_DIR/PageVersions.swift" "$SRC_DIR/PageCompare.swift" "$SRC_DIR/JournalExport.swift" "$SRC_DIR/CaptureDevices.swift" "$SRC_DIR/PageLock.swift" "$SRC_DIR/QuietSounds.swift" "$SRC_DIR/SoftMarkdown.swift" "$SRC_DIR/JournalLock.swift" "$SRC_DIR/JournalChrome.swift" "$SRC_DIR/TypewriterScroll.swift" "$SRC_DIR/MarkdownExtras.swift" "$SRC_DIR/JournalTags.swift" "$SRC_DIR/JournalApply.swift" "$SRC_DIR/JournalContinuity.swift" "$SRC_DIR/MermaidFlow.swift" "$SRC_DIR/ImageAnnotator.swift" "$SRC_DIR/WritingGoal.swift" "$SRC_DIR/QuietTools.swift" "$SRC_DIR/WritingFocus.swift" "$SRC_DIR/CommandGo.swift" "$SRC_DIR/JournalContext.swift" "$SRC_DIR/JournalStats.swift" "$SRC_DIR/JournalImport.swift" "$SRC_DIR/OllamaSettings.swift" "$SRC_DIR/QuireAction.swift" "$SRC_DIR/LocalAgent.swift" "$SRC_DIR/ImageStore.swift" "$SRC_DIR/AdvancedPanels.swift" "$SRC_DIR/OllamaService.swift" "$SRC_DIR/OllamaPanelView.swift" "$SRC_DIR/AgentPanelView.swift" "$SRC_DIR/SettingsView.swift" "$SRC_DIR/VoiceDictationService.swift" "$SRC_DIR/PageNarrator.swift" \
     -o "$APP/Contents/MacOS/freewrite" \
     -framework SwiftUI -framework AppKit -framework AVFoundation -framework Speech -framework Combine -framework PDFKit -framework LocalAuthentication
 
