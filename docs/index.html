@@ -10,25 +10,32 @@
   :root {
     color-scheme: light dark;
     --bg: #fbfaf8;
+    --bg-raised: #f3f1ec;
     --text: #262626;
     --muted: #6b6b6b;
     --line: #e4e1dc;
     --card: #ffffff;
     --accent: #262626;
     --accent-text: #fbfaf8;
+    --nav-bg: rgba(251, 250, 248, 0.82);
+    --shadow: 0 30px 60px -30px rgba(0,0,0,0.28);
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #161514;
+      --bg-raised: #1c1a18;
       --text: #eceae7;
       --muted: #9a968f;
       --line: #302e2b;
       --card: #1e1c1a;
       --accent: #eceae7;
       --accent-text: #161514;
+      --nav-bg: rgba(22, 21, 20, 0.78);
+      --shadow: 0 30px 60px -30px rgba(0,0,0,0.6);
     }
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
     margin: 0;
     background: var(--bg);
@@ -37,33 +44,49 @@
     -webkit-font-smoothing: antialiased;
   }
   a { color: inherit; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.9em; }
   .wrap {
-    max-width: 860px;
+    max-width: 900px;
     margin: 0 auto;
     padding: 0 20px;
   }
-  header.hero {
-    padding: 88px 0 56px;
-    text-align: center;
+
+  /* Nav */
+  .topnav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--nav-bg);
+    backdrop-filter: saturate(180%) blur(14px);
+    -webkit-backdrop-filter: saturate(180%) blur(14px);
+    border-bottom: 1px solid var(--line);
   }
-  .hero h1 {
-    font-size: clamp(2rem, 5vw, 3rem);
-    margin: 0 0 14px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-  }
-  .hero p.tagline {
-    font-size: 1.15rem;
-    color: var(--muted);
-    max-width: 46ch;
-    margin: 0 auto 30px;
-  }
-  .actions {
+  .navwrap {
     display: flex;
-    gap: 12px;
-    justify-content: center;
-    flex-wrap: wrap;
+    align-items: center;
+    gap: 20px;
+    padding: 13px 20px;
   }
+  .brand {
+    font-weight: 700;
+    font-size: 1.05rem;
+    letter-spacing: -0.01em;
+    text-decoration: none;
+    margin-right: auto;
+  }
+  .navlinks {
+    display: flex;
+    gap: 22px;
+    font-size: 0.88rem;
+    color: var(--muted);
+  }
+  .navlinks a { text-decoration: none; }
+  .navlinks a:hover { color: var(--text); }
+  @media (max-width: 620px) {
+    .navlinks { display: none; }
+  }
+
+  /* Buttons & pills */
   .btn {
     display: inline-block;
     padding: 11px 22px;
@@ -72,47 +95,109 @@
     font-size: 0.95rem;
     font-weight: 500;
     border: 1px solid var(--line);
+    white-space: nowrap;
+    transition: transform 0.15s ease, opacity 0.15s ease;
   }
+  .btn:hover { opacity: 0.85; }
   .btn.primary {
     background: var(--accent);
     color: var(--accent-text);
     border-color: var(--accent);
   }
+  .btn.small { padding: 7px 14px; font-size: 0.85rem; border-radius: 7px; }
+
+  .pill {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 99px;
+    border: 1px solid var(--line);
+    font-size: 0.78rem;
+    color: var(--muted);
+    background: var(--bg-raised);
+  }
+  .meta-pills {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 0 0 30px;
+  }
+
+  /* Hero */
+  header.hero {
+    padding: 72px 0 56px;
+    text-align: center;
+  }
+  .hero h1 {
+    font-size: clamp(2.2rem, 5.5vw, 3.4rem);
+    margin: 0 0 14px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+  .hero p.tagline {
+    font-size: 1.2rem;
+    color: var(--muted);
+    max-width: 46ch;
+    margin: 0 auto 22px;
+  }
+  .actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
   .hero-shot {
-    margin-top: 56px;
+    margin-top: 52px;
     border-radius: 12px;
     overflow: hidden;
     border: 1px solid var(--line);
-    box-shadow: 0 30px 60px -30px rgba(0,0,0,0.35);
+    box-shadow: var(--shadow);
   }
   .hero-shot img { display: block; width: 100%; height: auto; }
 
-  section { padding: 56px 0; border-top: 1px solid var(--line); }
+  section { padding: 64px 0; border-top: 1px solid var(--line); scroll-margin-top: 56px; }
   section h2 {
-    font-size: 1.5rem;
+    font-size: 1.6rem;
     margin: 0 0 8px;
     letter-spacing: -0.01em;
   }
   section p.lede {
     color: var(--muted);
-    margin: 0 0 32px;
+    margin: 0 0 34px;
     max-width: 60ch;
   }
+  .eyebrow {
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 8px;
+  }
 
+  /* Feature cards */
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 18px;
   }
   .card {
     background: var(--card);
     border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 18px 20px;
+    border-radius: 12px;
+    padding: 20px 22px;
   }
+  .card .icon {
+    width: 30px;
+    height: 30px;
+    margin-bottom: 12px;
+    color: var(--text);
+  }
+  .card .icon.sparkle { color: #b8863b; }
   .card h3 {
     margin: 0 0 6px;
-    font-size: 1rem;
+    font-size: 1.02rem;
   }
   .card p {
     margin: 0;
@@ -120,19 +205,94 @@
     font-size: 0.92rem;
   }
 
+  /* Ask-your-journal story */
+  .story {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 18px;
+    align-items: center;
+  }
+  .story figure {
+    margin: 0;
+    height: 340px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+  }
+  .story img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    display: block;
+  }
+  .story figcaption {
+    margin-top: 10px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+  }
+  .story .arrow {
+    font-size: 1.4rem;
+    color: var(--muted);
+  }
+  @media (max-width: 700px) {
+    .story { grid-template-columns: 1fr; }
+    .story .arrow { transform: rotate(90deg); justify-self: center; }
+  }
+  .stats-strip {
+    margin-top: 28px;
+    display: flex;
+    justify-content: center;
+  }
+  .stats-strip img {
+    max-width: 320px;
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+  }
+
+  /* Look gallery */
   .shots {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 16px;
   }
-  .shots img, .shots video {
+  .shots figure { margin: 0; }
+  .shots figure:not(.full) {
+    aspect-ratio: 16 / 11;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: var(--card);
+  }
+  .shots figure:not(.full) img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top;
+    display: block;
+  }
+  /* Portrait screenshots (the ⋯ menu) would lose almost everything to a landscape crop —
+     letterbox instead of cropping. */
+  .shots figure.tall img {
+    object-fit: contain;
+    object-position: center;
+  }
+  .shots .full img, .shots .full video {
     width: 100%;
     height: auto;
     border-radius: 10px;
     border: 1px solid var(--line);
     display: block;
   }
-  .shots figure { margin: 0; }
   .shots figcaption {
     margin-top: 8px;
     font-size: 0.85rem;
@@ -141,28 +301,36 @@
   }
   .full { grid-column: 1 / -1; }
 
+  /* Shortcuts */
   table.shortcuts {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.9rem;
+    font-size: 0.92rem;
   }
   table.shortcuts td {
-    padding: 8px 0;
+    padding: 11px 0;
     border-bottom: 1px solid var(--line);
   }
-  table.shortcuts td:first-child {
-    width: 110px;
-    color: var(--muted);
-    font-variant-numeric: tabular-nums;
+  table.shortcuts td:first-child { width: 130px; }
+  kbd {
+    display: inline-block;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.82rem;
+    background: var(--bg-raised);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 3px 8px;
+    color: var(--text);
   }
 
   footer {
-    padding: 40px 0 80px;
+    padding: 44px 0 80px;
     color: var(--muted);
     font-size: 0.85rem;
     text-align: center;
   }
   footer a { text-decoration: underline; }
+  footer .brand { display: block; font-size: 1rem; margin-bottom: 10px; color: var(--text); }
 
   @media (max-width: 560px) {
     .shots { grid-template-columns: 1fr; }
@@ -170,10 +338,28 @@
 </style>
 </head>
 <body>
+  <nav class="topnav">
+    <div class="wrap navwrap">
+      <a href="#" class="brand">Quire</a>
+      <div class="navlinks">
+        <a href="#features">Features</a>
+        <a href="#ask">Ask your journal</a>
+        <a href="#look">Look</a>
+        <a href="#shortcuts">Shortcuts</a>
+      </div>
+      <a class="btn small primary" href="https://github.com/surenjanath/Quire/releases/latest">Download</a>
+    </div>
+  </nav>
+
   <div class="wrap">
     <header class="hero">
       <h1>Quire</h1>
       <p class="tagline">A quiet, local-first writing room for macOS. One page. Your disk. No account.</p>
+      <div class="meta-pills">
+        <span class="pill">macOS 14+</span>
+        <span class="pill">Open source · MIT</span>
+        <span class="pill">Offline AI, optional</span>
+      </div>
       <div class="actions">
         <a class="btn primary" href="https://github.com/surenjanath/Quire/releases/latest">Download for macOS</a>
         <a class="btn" href="https://github.com/surenjanath/Quire">View on GitHub</a>
@@ -183,38 +369,66 @@
       </div>
     </header>
 
-    <section>
+    <section id="features">
+      <p class="eyebrow">What's in the room</p>
       <h2>Write without ceremony</h2>
       <p class="lede">A timer if you want urgency. Backspace lock if you want momentum. Markdown files you can open in any editor. Everything lives on your Mac in <code>~/Documents/Freewrite/</code> (or a folder you choose).</p>
       <div class="grid">
         <div class="card">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           <h3>The page</h3>
           <p>Timed sessions, backspace lock, typewriter scroll, sentence focus, soft markdown, smart quotes, privacy blur, find on page.</p>
         </div>
         <div class="card">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           <h3>The journal</h3>
           <p>History with search, pins, streak, and a month calendar. Go (⌘K) to jump to any past page. Tags, on-this-day, weekly review, per-page Touch ID lock, earlier versions, lifetime stats.</p>
         </div>
         <div class="card">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
           <h3>Video, voice &amp; Read Aloud</h3>
           <p>Video journaling and voice notes with live transcription, plus Read Aloud to hear any page read back — all on-device.</p>
         </div>
         <div class="card">
+          <svg class="icon sparkle" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.7 6.3L20 10l-6.3 1.7L12 18l-1.7-6.3L4 10l6.3-1.7L12 2z"/></svg>
           <h3>Offline AI, if you want it</h3>
           <p>Chat grounded in this page, or ask your <em>whole</em> journal a question from Go (⌘K) — a local Ollama model, nothing leaves your Mac. Or watch Claude Code / Codex write in a side panel.</p>
         </div>
         <div class="card">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
           <h3>Nothing to lose</h3>
           <p>Deleting an entry asks first, then goes to the macOS Trash — recoverable, not gone forever.</p>
         </div>
         <div class="card">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
           <h3>Plain files, your disk</h3>
           <p>Entries are plain markdown. Import a page from another app, export one as PDF, Markdown, or text — or the whole journal as a zip.</p>
         </div>
       </div>
     </section>
 
-    <section>
+    <section id="ask">
+      <p class="eyebrow">Grounded, on-device</p>
+      <h2>Ask your journal</h2>
+      <p class="lede">Not just a reflection on today's page — a real question about your whole history, answered by a local Ollama model that only uses what you've actually written. Nothing leaves your Mac.</p>
+      <div class="story">
+        <figure>
+          <img src="media/ask-go.png" alt="Typing a question into Quire's Go palette, offering to Ask the journal" loading="lazy">
+          <figcaption>Type a question into Go (⌘K)</figcaption>
+        </figure>
+        <span class="arrow">→</span>
+        <figure>
+          <img src="media/ask-reply.png" alt="Quire's offline chat replying with an answer grounded in one specific past journal entry" loading="lazy">
+          <figcaption>Get an answer grounded in your own pages</figcaption>
+        </figure>
+      </div>
+      <div class="stats-strip">
+        <img src="media/stats.png" alt="Quire's Journal Stats panel showing entry count, words written, longest entry, best streak, and top tag" loading="lazy">
+      </div>
+    </section>
+
+    <section id="look">
+      <p class="eyebrow">See it running</p>
       <h2>Look</h2>
       <p class="lede">A short tour of the page, dark mode, Settings, and the History calendar.</p>
       <div class="shots">
@@ -242,30 +456,32 @@
           <img src="media/chat.png" alt="Offline Ollama chat grounded in the journal, replying about several past entries" loading="lazy">
           <figcaption>Offline chat, grounded in the journal — nothing leaves the Mac</figcaption>
         </figure>
-        <figure>
+        <figure class="tall">
           <img src="media/menu.png" alt="The bottom-right quick menu: dictate, voice note, screenshot, and more" loading="lazy">
           <figcaption>The quick ⋯ menu</figcaption>
         </figure>
       </div>
     </section>
 
-    <section>
+    <section id="shortcuts">
+      <p class="eyebrow">Keyboard-first</p>
       <h2>Shortcuts</h2>
       <p class="lede">A few of the ones you'll use most. The full list is in the app and the README.</p>
       <table class="shortcuts">
-        <tr><td>⌘N</td><td>New page</td></tr>
-        <tr><td>⌘K</td><td>Go — commands and journal search</td></tr>
-        <tr><td>⌘F / ⌘G</td><td>Find in this page / next match</td></tr>
-        <tr><td>⌃⌘F</td><td>Fullscreen</td></tr>
-        <tr><td>⌘⇧P</td><td>Privacy blur</td></tr>
-        <tr><td>⌘⇧H</td><td>History</td></tr>
-        <tr><td>⌘⇧O</td><td>Ollama chat</td></tr>
-        <tr><td>⌘⇧V</td><td>Read Aloud</td></tr>
-        <tr><td>⌘⇧B</td><td>Backspace lock</td></tr>
+        <tr><td><kbd>⌘N</kbd></td><td>New page</td></tr>
+        <tr><td><kbd>⌘K</kbd></td><td>Go — commands and journal search</td></tr>
+        <tr><td><kbd>⌘F</kbd> / <kbd>⌘G</kbd></td><td>Find in this page / next match</td></tr>
+        <tr><td><kbd>⌃⌘F</kbd></td><td>Fullscreen</td></tr>
+        <tr><td><kbd>⌘⇧P</kbd></td><td>Privacy blur</td></tr>
+        <tr><td><kbd>⌘⇧H</kbd></td><td>History</td></tr>
+        <tr><td><kbd>⌘⇧O</kbd></td><td>Ollama chat</td></tr>
+        <tr><td><kbd>⌘⇧V</kbd></td><td>Read Aloud</td></tr>
+        <tr><td><kbd>⌘⇧B</kbd></td><td>Backspace lock</td></tr>
       </table>
     </section>
 
-    <section>
+    <section id="get-it">
+      <p class="eyebrow">No account needed</p>
       <h2>Get it</h2>
       <p class="lede">Download the latest release, or build it yourself — Command Line Tools are enough, Xcode isn't required.</p>
       <div class="grid">
@@ -281,6 +497,7 @@
     </section>
 
     <footer>
+      <span class="brand">Quire</span>
       <p>Fork of <a href="https://github.com/farzaa/freewrite">farzaa/freewrite</a> (MIT).</p>
       <p><a href="https://github.com/surenjanath/Quire">github.com/surenjanath/Quire</a></p>
     </footer>
