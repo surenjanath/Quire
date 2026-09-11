@@ -42,6 +42,7 @@ enum AppSettingsKeys {
     static let typewriterSound = "typewriterSound"
     static let roomTone = "roomTone"
     static let softMarkdown = "softMarkdown"
+    static let smartTypography = "smartTypography"
     static let lockedPageIDs = "lockedPageIDs"
 }
 

@@ -98,6 +98,7 @@ struct ContentView: View {
     @AppStorage(AppSettingsKeys.typewriterSound) private var typewriterSound = false
     @AppStorage(AppSettingsKeys.roomTone) private var roomToneEnabled = false
     @AppStorage(AppSettingsKeys.softMarkdown) private var softMarkdown = false
+    @AppStorage(AppSettingsKeys.smartTypography) private var smartTypography = false
     @AppStorage(AppSettingsKeys.lockedPageIDs) private var lockedPageIDsStored = ""
     @AppStorage(AppSettingsKeys.advancedImages) private var advancedImages = false
     @AppStorage(AppSettingsKeys.advancedGraph) private var advancedGraph = false
@@ -1231,6 +1232,13 @@ struct ContentView: View {
                                             Label("Soft markdown", systemImage: "checkmark")
                                         } else {
                                             Text("Soft markdown")
+                                        }
+                                    }
+                                    Button(action: { smartTypography.toggle() }) {
+                                        if smartTypography {
+                                            Label("Smart quotes", systemImage: "checkmark")
+                                        } else {
+                                            Text("Smart quotes")
                                         }
                                     }
                                 } label: {
@@ -2544,6 +2552,9 @@ struct ContentView: View {
         .onChange(of: softMarkdown) { _, _ in
             refreshEditorChrome()
         }
+        .onChange(of: smartTypography) { _, _ in
+            refreshEditorChrome()
+        }
         .onChange(of: colorScheme) { _, _ in
             refreshEditorChrome()
         }
@@ -2951,6 +2962,7 @@ struct ContentView: View {
         )
         SentenceFocus.apply(enabled: sentenceFocus, primary: primary, dim: primary.withAlphaComponent(0.28))
         SoftMarkdown.apply(enabled: softMarkdown, dim: primary.withAlphaComponent(0.35))
+        SmartTypography.apply(enabled: smartTypography)
         if let textView = CompositionGuard.firstTextView() {
             TypewriterScroll.apply(to: textView, enabled: typewriterMode)
         }

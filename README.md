@@ -61,6 +61,7 @@ Everything lives on your Mac:
 - Typewriter scroll (caret stays in the middle)
 - Sentence focus — dim every sentence except the one under the caret (⌘⇧L)
 - Soft markdown — dim `#` `**` `==` `>>` while you type (font menu or Settings → Writing)
+- Smart quotes — "curly" quotes and em dashes as you type (off by default, font menu or Settings → Writing)
 - Optional typewriter ticks and a soft room tone (Settings → Writing, off by default)
 - Find on this page (⌘F / ⌘G)
 - Privacy blur (⌘⇧P)

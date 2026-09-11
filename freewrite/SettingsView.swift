@@ -348,6 +348,7 @@ private struct WritingSettingsTab: View {
     @AppStorage(AppSettingsKeys.typewriterSound) private var typewriterSound = false
     @AppStorage(AppSettingsKeys.roomTone) private var roomTone = false
     @AppStorage(AppSettingsKeys.softMarkdown) private var softMarkdown = false
+    @AppStorage(AppSettingsKeys.smartTypography) private var smartTypography = false
     @State private var cameras: [AVCaptureDevice] = []
     @State private var microphones: [AVCaptureDevice] = []
     @State private var folderPath = JournalFolder.resolve(
@@ -395,6 +396,8 @@ private struct WritingSettingsTab: View {
                 settingsToggle("Hide the bar when idle", "After eight seconds without typing", $idleFadeEnabled)
                 settingsDivider
                 settingsToggle("Soft markdown", "Dim # ** == and >>", $softMarkdown)
+                settingsDivider
+                settingsToggle("Smart quotes", "\u{201c}curly\u{201d} quotes and em dashes as you type", $smartTypography)
                 settingsDivider
                 settingsToggle("Typewriter ticks", "A quiet click on each key", $typewriterSound)
                 settingsDivider

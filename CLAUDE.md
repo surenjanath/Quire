@@ -1082,6 +1082,7 @@ are sanitized by `WritingPreferences`.
 - **Per-page lock**: History lock icon. `PageLock` stores UUIDs. Touch ID to open or unlock. Disk stays markdown.
 - **Quiet sounds**: Typewriter `Tink` and generated room tone. Off by default.
 - **Soft markdown**: Dim markers via `SoftMarkdown.markerRanges`. Font menu + Settings.
+- **Smart quotes**: `SmartTypography.apply` sets `isAutomaticQuoteSubstitutionEnabled` / `isAutomaticDashSubstitutionEnabled` on the editor's NSTextView — native macOS behavior (Mail, Notes, TextEdit all default it on) that SwiftUI's `TextEditor` never turns on itself. Off by default, matching every other Advanced/Writing toggle. Font menu + Settings → Writing. Only affects new typing, not text already on the page.
 - **Sentence focus (⌘⇧L)**: Dims every sentence except the one under the caret, like iA Writer. Font menu toggle. Stays off until you turn it on.
 - **Yesterday continue**: An empty page can show yesterday's last sentence. Click it to start from there.
 - **Favorite fonts**: Font menu → Add to favorites. Starred faces sit at the top.

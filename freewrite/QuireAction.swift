@@ -14,7 +14,7 @@ enum QuireAction {
     static let aboutEmail = "surenjanath.singh@gmail.com"
     static let aboutBasedOn = "Freewrite by Farza"
     static let aboutCredits = "A quiet, local-first writing room. Pages stay on this Mac."
-    static let aboutSite = "https://github.com/surenjanath/freewrite"
+    static let aboutSite = "https://github.com/surenjanath/Quire"
     static let aboutIdea = "One blank page. A timer if you want urgency. Backspace lock if you want momentum. Everything else stays behind the glass until you ask."
     static let aboutPrivacy = "No account. No sync. No analytics. ChatGPT and Claude open in the browser only if you click them. Ollama, Claude Code, and Codex stay on this Mac. Pages are plain markdown you can open in any editor."
     static let aboutFolderHint = "~/Documents/Freewrite"
@@ -22,11 +22,13 @@ enum QuireAction {
     static let aboutIncludes = [
         "A daily spark on the empty page",
         "History, search, pins, streak, and a month calendar",
-        "Go (⌘K) to jump to a past page or run a command",
+        "Go (⌘K) to jump to a past page, run a command, or ask your journal a question",
         "Voice notes, dictation, and video journal",
-        "Optional Chat: ChatGPT, Claude, Ollama, Claude Code, Codex",
+        "Optional Chat: ChatGPT, Claude, Ollama, Claude Code, Codex — grounded in your own pages",
         "Earlier versions before Chat changes the page",
-        "Export one page as PDF or the whole journal as a zip"
+        "Import a page from another app, export one as PDF, or the whole journal as a zip",
+        "Journal stats — lifetime words, longest entry, best streak",
+        "Deleting asks first, then goes to the Trash — not gone forever"
     ]
     static let aboutShortcuts: [(key: String, action: String)] = [
         ("⌘N", "New page"),
@@ -35,9 +37,11 @@ enum QuireAction {
         ("⌘F", "Find on this page"),
         ("⌘⇧H", "History"),
         ("⌘⇧O", "Chat"),
+        ("⌘⇧R", "Weekly review"),
         ("⌘⇧L", "Focus this sentence"),
         ("⌘⇧P", "Hide the page"),
         ("⌘⇧B", "Lock backspace"),
+        ("⌘⇧D", "Light / dark"),
         ("⌘⇧T", "Timer"),
         ("⌃⌘F", "Fullscreen")
     ]

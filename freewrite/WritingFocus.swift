@@ -147,6 +147,16 @@ enum SentenceFocus {
     }
 }
 
+enum SmartTypography {
+    // NSTextView already knows how to do this (Mail, Notes, TextEdit all default it on) — Quire's
+    // TextEditor just never turns it on, since SwiftUI's TextEditor doesn't touch these traits.
+    static func apply(enabled: Bool, in view: NSView? = NSApp.keyWindow?.contentView) {
+        guard let textView = CompositionGuard.firstTextView(in: view) else { return }
+        textView.isAutomaticQuoteSubstitutionEnabled = enabled
+        textView.isAutomaticDashSubstitutionEnabled = enabled
+    }
+}
+
 enum EditorPlaceholder {
     static func apply(
         _ text: String,
